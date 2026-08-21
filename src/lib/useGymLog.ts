@@ -16,7 +16,11 @@ import {
   readOut,
   round1,
   toDisplayWeight,
+  type ExerciseData,
 } from "@/lib/gymlog";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
+import { isSupabaseConfigured, getSupabaseClient } from "@/lib/supabase";
+import { loadHistory, saveSet, seedIfEmpty } from "@/lib/db";
 
 export type Screen = "today" | "chat" | "exercise" | "progress" | "spotify" | "import" | "settings";
 export type Sheet = "menu" | "parse" | null;
@@ -102,6 +106,13 @@ export function useGymLog() {
   const [nextDay, setNextDay] = useState(DEFAULT_NEXT_DAY);
   const [hydrated, setHydrated] = useState(false);
 
+  // When Supabase is configured the app is account-backed: `authed` gates the
+  // UI behind sign-in and `history` is the user's real data. Without it both
+  // stay at their zero-config defaults and the seeded history is used instead.
+  const [authed, setAuthed] = useState<boolean | null>(isSupabaseConfigured ? null : true);
+  const [history, setHistory] = useState<Record<string, ExerciseData>>(EX);
+  const [syncing, setSyncing] = useState(false);
+
   // Progressive enhancement: seed with the fallback copy immediately (so the
   // app matches the prototype offline with zero flicker), then let the real
   // Gemini judgment replace it in the background once /api/coach resolves.
@@ -144,6 +155,39 @@ export function useGymLog() {
     setHydrated(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Watches the auth session and pulls the user's history once signed in.
+  // Seeding is a no-op on an account that already has data.
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    const supabase = getSupabaseClient();
+
+    const sync = async (signedIn: boolean) => {
+      setAuthed(signedIn);
+      if (!signedIn) {
+        setHistory(EX);
+        return;
+      }
+      setSyncing(true);
+      try {
+        await seedIfEmpty();
+        setHistory(await loadHistory());
+      } catch (err) {
+        // Leave the seeded history in place so the app stays usable.
+        console.error("Supabase sync failed", err);
+      } finally {
+        setSyncing(false);
+      }
+    };
+
+    supabase.auth
+      .getSession()
+      .then(({ data }: { data: { session: Session | null } }) => void sync(Boolean(data.session)));
+    const { data: sub } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => void sync(Boolean(session))
+    );
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -254,7 +298,21 @@ export function useGymLog() {
     setSheet(null);
     setParsed(null);
     setScreen("today");
-  }, [parsed, units]);
+
+    // Persist to Postgres and pull the history back so trends include this set.
+    // The optimistic row above stays put if the write fails, so nothing the
+    // user just entered disappears from the screen.
+    if (isSupabaseConfigured && authed) {
+      void (async () => {
+        try {
+          await saveSet(parsed);
+          setHistory(await loadHistory());
+        } catch (err) {
+          console.error("Failed to save set", err);
+        }
+      })();
+    }
+  }, [parsed, units, authed]);
 
   const togglePlay = useCallback(() => setPlaying((p) => !p), []);
   const nextTrack = useCallback(() => {
@@ -281,13 +339,15 @@ export function useGymLog() {
 
   // ── derived data ──────────────────────────────────────────────────────
 
-  const ro = readOut(activeEx);
+  // Every figure below recomputes from `history` — the seed when running
+  // without Supabase, the user's own rows once signed in.
+  const ro = readOut(activeEx, history);
   const cv = useCallback((w: number) => toDisplayWeight(w, units), [units]);
 
   const rotation = ROT.map((d) => ({ name: d, active: d === nextDay, setNext: () => setNextDay(d) }));
 
-  const todayPlan = PLAN.map((name) => {
-    const hist = EX[name].hist;
+  const todayPlan = PLAN.filter((name) => history[name]?.hist.length).map((name) => {
+    const hist = history[name].hist;
     const last = hist[hist.length - 1];
     return {
       name,
@@ -297,8 +357,8 @@ export function useGymLog() {
     };
   });
 
-  const progressCards = PROGRESS_EXERCISES.map((name) => {
-    const r = readOut(name);
+  const progressCards = PROGRESS_EXERCISES.filter((name) => history[name]?.hist.length).map((name) => {
+    const r = readOut(name, history);
     return {
       name,
       status: r.status,
@@ -341,8 +401,12 @@ export function useGymLog() {
     thinkKey: thinkI,
     say,
     activeEx,
-    exGroup: EX[activeEx].group,
+    exGroup: history[activeEx]?.group ?? EX[activeEx].group,
     readOutData: ro,
+    authed,
+    syncing,
+    supabaseEnabled: isSupabaseConfigured,
+    signOut: () => void getSupabaseClient().auth.signOut(),
     coachText: coachText[activeEx] ?? COACH[activeEx],
     cv,
     openExercise,

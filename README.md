@@ -23,7 +23,7 @@ Copy `.env.local.example` to `.env.local` and fill in what you have.
 | Variable | What it unlocks | Without it |
 | --- | --- | --- |
 | `GEMINI_API_KEY` | Real AI coach judgment | Fixed coach copy from the design prototype |
-| `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` | Postgres + Google auth | Sets persist to localStorage only |
+| `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` | Postgres + Google auth | Seeded history, sets persist to localStorage |
 | `SPOTIFY_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI` | Real playback control | Spotify screen runs on mock state |
 
 ## The one architectural rule
@@ -35,6 +35,33 @@ Copy `.env.local.example` to `.env.local` and fill in what you have.
 `src/lib/coach.ts` sends those already-computed numbers to Gemini with instructions to reason freely but never state a figure it wasn't given. When no API key is set it falls back to fixed copy. The date comes from the system clock and is passed in as a fact — the model is never asked to work out what day it is.
 
 The UI keeps the split visible: computed figures sit under a `COMPUTED` label in tabular figures, the coach's read sits below a rule next to an avatar. You should be able to see which half the model wrote without reading it.
+
+## Supabase
+
+When the Supabase env vars are set the app becomes account-backed: it gates
+behind Google sign-in, seeds a fresh account with the exercises, rotation and
+starter history, and reads every figure back out of Postgres. Without them it
+falls back to bundled seed data and localStorage, so it still runs unconfigured.
+
+Apply the schema with either:
+
+```bash
+npx supabase link --project-ref <ref>
+npx supabase db push
+```
+
+or by pasting `supabase/migrations/0001_init.sql` into the dashboard SQL editor.
+
+**Google sign-in** needs an OAuth client from Google Cloud Console with this
+redirect URI:
+
+```
+https://<project-ref>.supabase.co/auth/v1/callback
+```
+
+Then enable the Google provider in Authentication → Providers with that client
+ID and secret. RLS scopes every row to `auth.uid()`, so queries return nothing
+until someone is signed in.
 
 ## Layout
 
@@ -48,13 +75,15 @@ src/
   components/
     IconSprite.tsx        Lucide sprite + <Icon> helper
     Island.tsx            Dynamic Island now-playing
+    SignIn.tsx            Google sign-in gate
     screens/              the 8 screens
     sheets/               menu + parse confirmation
   lib/
     gymlog.ts             seed data, compute, text parser
     coach.ts              LLM judgment layer (server-only)
-    useGymLog.ts          app state
-    supabase.ts           client scaffold, not yet wired to the UI
+    useGymLog.ts          app state, auth session, history sync
+    db.ts                 Supabase reads/writes and first-run seeding
+    supabase.ts           browser client (optional — see isSupabaseConfigured)
 supabase/migrations/      schema with RLS
 ```
 
@@ -71,6 +100,10 @@ Nothing is written until you confirm. One bad number poisons a trend, so there i
 
 ## Status
 
-Working: all 8 screens, both themes, text parsing, logging, the coach (with and without Gemini), progress read-outs, settings, PWA install.
+Working: all 8 screens, both themes, text parsing, logging, the coach (with and
+without Gemini), progress read-outs, settings, PWA install, Supabase persistence
+with RLS, and first-run seeding.
 
-Not yet wired: Supabase reads/writes (schema and client are ready — `useGymLog.ts` still uses localStorage), Google sign-in, real Spotify, real Notion import.
+Not yet wired: real Spotify playback and the real Notion import — both screens
+still run on local mock state. Google sign-in works once the provider is
+configured on the Supabase project.

@@ -176,8 +176,18 @@ export interface ReadOut {
   spark: (height: number) => string;
 }
 
-export function readOut(name: string): ReadOut {
-  const h = EX[name].hist;
+// `data` defaults to the bundled seed so the app still computes with zero
+// config. Once Supabase is connected the hook passes the user's real history
+// in, and every figure on screen recomputes from it.
+export function readOut(name: string, data: Record<string, ExerciseData> = EX): ReadOut {
+  const h = data[name]?.hist ?? [];
+
+  // A brand-new account, or an exercise never logged: report a flat, empty
+  // trend rather than throwing. The UI renders this as "not logged".
+  if (h.length === 0) {
+    return { hist: [], e1rm: 0, pct: 0, rpeDelta: 0, status: "flat", rpes: [], spark: () => "" };
+  }
+
   const e = h.map((s) => epley(s.w, s.reps));
   const first = e[0];
   const last = e[e.length - 1];

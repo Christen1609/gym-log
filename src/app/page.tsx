@@ -11,10 +11,17 @@ import { ProgressScreen } from "@/components/screens/ProgressScreen";
 import { SettingsScreen } from "@/components/screens/SettingsScreen";
 import { SpotifyScreen } from "@/components/screens/SpotifyScreen";
 import { TodayScreen } from "@/components/screens/TodayScreen";
+import { SignIn } from "@/components/SignIn";
 import { useGymLog } from "@/lib/useGymLog";
 
 export default function Home() {
   const state = useGymLog();
+
+  // Only when Supabase is configured. `null` means the session check hasn't
+  // resolved yet — render the empty ground rather than flashing the sign-in
+  // screen at an already-signed-in user.
+  if (state.authed === null) return <div className="app-shell" data-theme={state.theme} />;
+  if (!state.authed) return <SignIn theme={state.theme} />;
 
   return (
     <div className="app-shell" data-theme={state.theme}>
