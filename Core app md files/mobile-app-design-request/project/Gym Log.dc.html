@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/organic-dd38fbe4-6ba2-496d-93ff-7b4b135d1dad/styles.css">
+<script src="_ds/organic-dd38fbe4-6ba2-496d-93ff-7b4b135d1dad/_ds_bundle.js"></script>
+<style>
+  body{margin:0;background:#e6e6e6}
+  a{color:var(--color-accent);text-decoration:none}
+  a:hover{opacity:.7}
+  .app{
+    --font-heading:"Figtree",system-ui,sans-serif; --font-heading-weight:600;
+    --color-bg:#ffffff; --color-surface:#f4f4f3; --color-text:#262626;
+    --color-accent:#1a1a1a; --color-accent-2:#8c8c8c;
+    --color-divider:rgba(0,0,0,.10);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.07); --shadow-md:0 3px 12px rgba(0,0,0,.09);
+    --shadow-lg:0 14px 40px rgba(0,0,0,.14);
+  }
+  .app,.app *{transition:background-color .35s ease,color .35s ease,border-color .35s ease}
+  .app[data-theme="dark"]{
+    --color-bg:#000000; --color-surface:#141414; --color-text:#ededed;
+    --color-accent:#f2f2f2; --color-accent-2:#8f8f8f;
+    --color-divider:rgba(255,255,255,.14);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.6); --shadow-md:0 4px 14px rgba(0,0,0,.55);
+    --shadow-lg:0 14px 40px rgba(0,0,0,.7);
+  }
+  .app h1,.app h2,.app h3{color:color-mix(in srgb,var(--color-text) 80%,transparent);letter-spacing:-.025em}
+  .app .tag-accent,.app .tag-accent-2,.app .tag-neutral{background:color-mix(in srgb,var(--color-text) 8%,transparent);color:color-mix(in srgb,var(--color-text) 78%,transparent)}
+  .app .tag-outline{border-color:var(--color-divider);color:inherit}
+  .app[data-theme="dark"] .washed{filter:saturate(0) contrast(.9) brightness(.7)}
+  .island{position:absolute;top:11px;left:50%;transform:translateX(-50%);z-index:60;height:37px;display:flex;align-items:center;gap:9px;padding:0 13px 0 11px;border-radius:24px;background:#000;color:#fff;border:0;cursor:pointer;font-family:var(--font-body);min-width:160px;max-width:172px;box-shadow:0 0 0 .5px rgba(255,255,255,.10);animation:isle .45s cubic-bezier(.2,1.2,.3,1)}
+  @keyframes isle{from{min-width:126px;opacity:.55}to{min-width:160px;opacity:1}}
+  .island:active{transform:translateX(-50%) scale(.97)}
+  .eq{display:flex;align-items:flex-end;gap:2.5px;height:13px;flex:none}
+  .eq i{display:block;width:2.5px;border-radius:2px;background:#fff;height:4px;animation:eq .9s ease-in-out infinite}
+  .eq i:nth-child(2){animation-delay:.18s}.eq i:nth-child(3){animation-delay:.36s}.eq i:nth-child(4){animation-delay:.09s}
+  @keyframes eq{0%,100%{height:4px}50%{height:13px}}
+  .island[data-playing="false"] .eq i{animation-play-state:paused;height:4px;opacity:.45}
+  .scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .scroll::-webkit-scrollbar{display:none}
+  .xscroll{overflow-x:auto;scrollbar-width:none}
+  .xscroll::-webkit-scrollbar{display:none}
+  .thm{position:relative;display:flex;align-items:center;gap:2px;padding:3px;border-radius:999px;background:color-mix(in srgb,var(--color-text) 9%,transparent);cursor:pointer;border:0}
+  .thm-knob{position:absolute;top:3px;left:3px;width:30px;height:30px;border-radius:999px;background:var(--color-accent);transition:transform .34s cubic-bezier(.4,1.35,.5,1)}
+  .app[data-theme="dark"] .thm-knob{transform:translateX(32px)}
+  .thm-ic{position:relative;z-index:1;width:30px;height:30px;display:grid;place-items:center;opacity:.42;transition:opacity .3s}
+  .thm-sun{opacity:1;color:var(--color-bg)}
+  .app[data-theme="dark"] .thm-sun{opacity:.42;color:var(--color-text)}
+  .app[data-theme="dark"] .thm-moon{opacity:1;color:var(--color-bg)}
+  .row{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:transparent;border:0;font:inherit;color:inherit;cursor:pointer;padding:13px 14px;border-radius:22px;transition:background .18s}
+  .row:hover{background:color-mix(in srgb,var(--color-text) 6%,transparent)}
+  .row:active{background:color-mix(in srgb,var(--color-text) 11%,transparent)}
+  .num{font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  .micro{font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;opacity:.5}
+  .seg2{display:flex;gap:3px;padding:3px;border-radius:999px;background:color-mix(in srgb,var(--color-text) 8%,transparent)}
+  .seg2 button{flex:1;border:0;background:transparent;color:inherit;font:inherit;font-size:13px;padding:8px 14px;border-radius:999px;cursor:pointer;transition:background .2s,color .2s}
+  .seg2 button:hover{background:color-mix(in srgb,var(--color-text) 7%,transparent)}
+  .seg2[data-val="kg"] [data-opt="kg"],.seg2[data-val="lb"] [data-opt="lb"],
+  .seg2[data-val="direct"] [data-opt="direct"],.seg2[data-val="detailed"] [data-opt="detailed"],
+  .seg2[data-val="on"] [data-opt="on"],.seg2[data-val="off"] [data-opt="off"]{background:var(--color-accent);color:var(--color-bg)}
+  .msg{display:flex;gap:9px;align-items:flex-end}
+  .msg[data-who="user"]{justify-content:flex-end}
+  .msg .bub{max-width:78%;padding:11px 15px;border-radius:22px;font-size:14px;line-height:1.5}
+  .msg[data-who="coach"] .bub{background:var(--color-surface);border-bottom-left-radius:7px}
+  .msg[data-who="user"] .bub{background:var(--color-accent);color:var(--color-bg);border-bottom-right-radius:7px}
+  .msg[data-who="user"] .av{display:none !important}
+  .tri{display:none}
+  [data-status="up"] .tri-up,[data-status="down"] .tri-down,[data-status="flat"] .tri-flat,[data-status="grind"] .tri-grind{display:block}
+  [data-status="up"]{color:var(--color-accent-2)}
+  [data-status="grind"],[data-status="down"]{color:var(--color-accent)}
+  [data-status="flat"]{opacity:.65}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:999px;font-size:12.5px;flex:none;border:1px solid var(--color-divider);background:transparent;color:inherit;font-family:inherit;cursor:pointer;transition:background .18s}
+  .pill:hover{background:color-mix(in srgb,var(--color-text) 6%,transparent)}
+  .pill[data-active="true"]{background:var(--color-accent);color:var(--color-bg);border-color:transparent}
+  .sheet{position:absolute;left:0;right:0;bottom:0;z-index:80;background:var(--color-surface);border-radius:34px 34px 0 0;box-shadow:var(--shadow-lg);padding:10px 18px 34px;animation:up .28s cubic-bezier(.2,.9,.3,1)}
+  @keyframes up{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  @keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+  .thinkbub{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:22px;border-bottom-left-radius:7px;background:var(--color-surface);animation:breathe 2.4s ease-in-out infinite}
+  @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.018)}}
+  .tw{display:inline-block;font-size:14px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;
+    background:linear-gradient(100deg,color-mix(in srgb,var(--color-text) 28%,transparent) 25%,var(--color-text) 45%,color-mix(in srgb,var(--color-text) 28%,transparent) 65%);
+    background-size:230% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
+    animation:shim 1.7s linear infinite,wordin .42s cubic-bezier(.2,1,.3,1)}
+  @keyframes shim{from{background-position:130% 0}to{background-position:-130% 0}}
+  @keyframes wordin{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+  .jump{display:flex;align-items:flex-end;gap:4px;flex:none;height:14px;padding-bottom:1px}
+  .jump i{display:block;width:5px;height:5px;border-radius:99px;background:var(--color-text);opacity:.55;animation:jmp .95s cubic-bezier(.3,.8,.4,1) infinite}
+  .jump i:nth-child(2){animation-delay:.16s}
+  .jump i:nth-child(3){animation-delay:.32s}
+  @keyframes jmp{0%,58%,100%{transform:translateY(0);opacity:.45}22%{transform:translateY(-8px);opacity:1}}
+  .av-pulse{animation:pul 1.6s ease-out infinite}
+  @keyframes pul{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--color-text) 26%,transparent)}70%,100%{box-shadow:0 0 0 8px transparent}}
+  .dot3 span{display:block;width:6px;height:6px;border-radius:99px;background:currentColor;animation:blink 1.2s infinite}
+  .dot3 span:nth-child(2){animation-delay:.15s}
+  .dot3 span:nth-child(3){animation-delay:.3s}
+  .scrim{position:absolute;inset:0;z-index:70;background:color-mix(in srgb,#151210 55%,transparent);animation:fade .2s;border:0;padding:0}
+  .screen{animation:fade .22s ease}
+  .stripe{background-image:repeating-linear-gradient(45deg,color-mix(in srgb,var(--color-text) 11%,transparent) 0 5px,transparent 5px 10px)}
+</style>
+</helmet>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></symbol>
+<symbol id="i-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7M12 19V5"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M6 3.5 20 12 6 20.5Z"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 4v16M17 4v16"/></symbol>
+<symbol id="i-next" viewBox="0 0 24 24"><path d="M5 4.5 15 12 5 19.5ZM19 5v14"/></symbol>
+<symbol id="i-prev" viewBox="0 0 24 24"><path d="M19 4.5 9 12l10 7.5ZM5 5v14"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-tup" viewBox="0 0 24 24"><path d="M22 7 13.5 15.5 8.5 10.5 2 17M16 7h6v6"/></symbol>
+<symbol id="i-tdown" viewBox="0 0 24 24"><path d="M22 17 13.5 8.5 8.5 13.5 2 7M16 17h6v-6"/></symbol>
+<symbol id="i-flat" viewBox="0 0 24 24"><path d="M4 12h16"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+<symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+<symbol id="i-cog" viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+<symbol id="i-import" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+<symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-pulse" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol>
+</defs></svg>
+
+<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:44px 20px;background:#e6e6e6;font-family:var(--font-body)">
+
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" width="{{ frameW }}" height="{{ frameH }}" dark="{{ isDark }}" hint-size="402px,874px">
+<div class="app" data-theme="{{ theme }}" style="height:100%;display:flex;flex-direction:column;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);position:relative;overflow:hidden">
+
+<sc-if value="{{ showIsland }}" hint-placeholder-val="{{ true }}">
+  <button class="island" data-playing="{{ isPlaying }}" onClick="{{ goSpotify }}">
+    <span style="width:22px;height:22px;border-radius:99px;background:rgba(255,255,255,.14);display:grid;place-items:center;flex:none"><svg width="12" height="12" fill="none" stroke="#fff" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-music"></use></svg></span>
+    <span style="flex:1;min-width:0;text-align:left;font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.01em">{{ trackName }}</span>
+    <span class="eq"><i></i><i></i><i></i><i></i></span>
+    <span onClick="{{ togglePlay }}" style="width:24px;height:24px;border-radius:99px;display:grid;place-items:center;flex:none;background:rgba(255,255,255,.14)"><svg width="12" height="12" fill="none" stroke="#fff" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="{{ playIcon }}"></use></svg></span>
+  </button>
+</sc-if>
+
+<!-- ══ TODAY ══ -->
+<sc-if value="{{ isToday }}" hint-placeholder-val="{{ true }}">
+<div class="screen" style="height:100%;display:flex;flex-direction:column;min-height:0">
+  <div style="flex:none;display:flex;align-items:center;justify-content:space-between;padding:60px 18px 8px">
+    <div style="font-family:var(--font-heading);font-size:21px;line-height:1">Gym Log</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="thm" onClick="{{ toggleTheme }}" aria-label="Toggle theme">
+        <div class="thm-knob"></div>
+        <span class="thm-ic thm-sun"><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-sun"></use></svg></span>
+        <span class="thm-ic thm-moon"><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-moon"></use></svg></span>
+      </button>
+      <button class="btn btn-secondary btn-icon" onClick="{{ openMenu }}" style="width:36px;height:36px" aria-label="Menu"><svg width="20" height="20" fill="currentColor" stroke="none"><use href="#i-menu"></use></svg></button>
+    </div>
+  </div>
+
+  <div class="scroll" style="flex:1;min-height:0;padding:0 18px 8px">
+    <div class="xscroll" style="display:flex;gap:7px;padding:8px 0 14px">
+      <span class="micro" style="align-self:center;padding-right:4px;display:flex;align-items:center;gap:5px"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-repeat"></use></svg>Rotation</span>
+      <sc-for list="{{ rotation }}" as="d" hint-placeholder-count="4">
+        <span class="pill" data-active="{{ d.active }}">{{ d.name }}</span>
+      </sc-for>
+    </div>
+
+    <h1 style="font-size:40px;margin:0 0 6px;letter-spacing:-.02em">{{ dayTitle }}</h1>
+    <p style="margin:0 0 20px;font-size:13.5px;opacity:.6">{{ daySub }}</p>
+
+    <sc-if value="{{ hasLogged }}" hint-placeholder-val="{{ false }}">
+      <div style="margin-bottom:18px">
+        <div class="micro" style="margin-bottom:8px;color:var(--color-accent-2)">Logged today</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <sc-for list="{{ loggedToday }}" as="s" hint-placeholder-count="1">
+            <div style="display:flex;align-items:center;gap:10px;padding:11px 15px;border-radius:22px;background:color-mix(in srgb,var(--color-accent-2) 16%,transparent)">
+              <svg width="15" height="15" fill="none" stroke="var(--color-accent-2)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><use href="#i-check"></use></svg>
+              <span style="font-size:14px;font-weight:600;flex:1">{{ s.name }}</span>
+              <span class="num" style="font-size:13px;opacity:.75">{{ s.summary }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <div class="micro" style="margin-bottom:8px">Planned · last time</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <sc-for list="{{ todayPlan }}" as="ex" hint-placeholder-count="4">
+        <button class="row" onClick="{{ ex.open }}" style="background:var(--color-surface);padding:15px 16px">
+          <div style="flex:1;min-width:0">
+            <div style="font-family:var(--font-heading);font-size:16.5px;line-height:1.2;margin-bottom:4px">{{ ex.name }}</div>
+            <div class="num" style="font-size:12.5px;opacity:.62">{{ ex.last }}</div>
+          </div>
+          <span class="tag tag-neutral num" style="flex:none">{{ ex.est }}</span>
+          <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="opacity:.4;flex:none"><use href="#i-chev"></use></svg>
+        </button>
+      </sc-for>
+    </div>
+
+  </div>
+
+  <div style="flex:none;padding:8px 18px 30px;border-top:1px solid var(--color-divider)">
+    <div class="xscroll" style="display:flex;gap:7px;padding:2px 0 10px">
+      <sc-for list="{{ chips }}" as="c" hint-placeholder-count="3">
+        <button class="pill" onClick="{{ c.go }}">{{ c.label }}</button>
+      </sc-for>
+    </div>
+    <div style="display:flex;gap:9px;align-items:center">
+      <input class="input" ref="{{ draftRef }}" onKeyDown="{{ onDraftKey }}" placeholder="Log a set, or ask the coach…" style="flex:1;min-height:46px;font-size:14.5px">
+      <button class="btn btn-primary btn-icon" onClick="{{ sendDraft }}" style="width:46px;height:46px;flex:none" aria-label="Send"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-up"></use></svg></button>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ══ COACH CHAT ══ -->
+<sc-if value="{{ isChat }}" hint-placeholder-val="{{ false }}">
+<div class="screen" style="height:100%;display:flex;flex-direction:column;min-height:0">
+  <div style="flex:none;display:flex;align-items:center;gap:12px;padding:60px 18px 10px;border-bottom:1px solid var(--color-divider)">
+    <button class="btn btn-secondary btn-icon" onClick="{{ goToday }}" style="width:36px;height:36px" aria-label="Back"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-back"></use></svg></button>
+    <div style="flex:1">
+      <div style="font-family:var(--font-heading);font-size:18px;line-height:1.1">Coach</div>
+      <div style="font-size:11px;opacity:.55">Reads your numbers, never invents them</div>
+    </div>
+    <button class="thm" onClick="{{ toggleTheme }}" aria-label="Toggle theme">
+      <div class="thm-knob"></div>
+      <span class="thm-ic thm-sun"><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-sun"></use></svg></span>
+      <span class="thm-ic thm-moon"><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-moon"></use></svg></span>
+    </button>
+  </div>
+  <div class="scroll" ref="{{ chatScrollRef }}" style="flex:1;min-height:0;padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+    <sc-for list="{{ messages }}" as="m" hint-placeholder-count="2">
+      <div class="msg" data-who="{{ m.who }}">
+        <div class="av" style="width:26px;height:26px;border-radius:999px;background:var(--color-accent);flex:none;display:grid;place-items:center"><span style="width:8px;height:8px;border-radius:999px;background:var(--color-bg);display:block"></span></div>
+        <div class="bub">{{ m.text }}</div>
+      </div>
+    </sc-for>
+    <sc-if value="{{ typing }}" hint-placeholder-val="{{ false }}">
+      <div class="msg" data-who="coach">
+        <div class="av av-pulse" style="width:26px;height:26px;border-radius:999px;background:var(--color-accent);flex:none;display:grid;place-items:center"><span style="width:8px;height:8px;border-radius:999px;background:var(--color-bg);display:block"></span></div>
+        <div class="thinkbub"><span class="jump"><i></i><i></i><i></i></span>{{ thinkWord }}</div>
+      </div>
+    </sc-if>
+  </div>
+  <div style="flex:none;padding:10px 18px 30px;border-top:1px solid var(--color-divider);display:flex;gap:9px;align-items:center">
+    <input class="input" ref="{{ chatRef }}" onKeyDown="{{ onChatKey }}" placeholder="Ask the coach…" style="flex:1;min-height:46px;font-size:14.5px">
+    <button class="btn btn-primary btn-icon" onClick="{{ sendChat }}" style="width:46px;height:46px;flex:none" aria-label="Send"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-up"></use></svg></button>
+  </div>
+</div>
+</sc-if>
+
+<!-- ══ EXERCISE DETAIL ══ -->
+<sc-if value="{{ isExercise }}" hint-placeholder-val="{{ false }}">
+<div class="screen" style="height:100%;display:flex;flex-direction:column;min-height:0">
+  <div style="flex:none;display:flex;align-items:center;gap:12px;padding:60px 18px 10px">
+    <button class="btn btn-secondary btn-icon" onClick="{{ back }}" style="width:36px;height:36px" aria-label="Back"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-back"></use></svg></button>
+    <div style="flex:1;font-size:12.5px;opacity:.55">{{ exGroup }}</div>
+  </div>
+  <div class="scroll" style="flex:1;min-height:0;padding:0 18px 30px">
+    <h1 style="font-size:34px;margin:0 0 18px;letter-spacing:-.02em">{{ exName }}</h1>
+
+    <div class="card" style="padding:18px">
+      <div style="display:flex;align-items:flex-end;gap:14px">
+        <div style="flex:1">
+          <div class="micro" style="margin-bottom:2px">est 1RM · Epley</div>
+          <div class="num" style="font-family:var(--font-heading);font-size:38px;line-height:1">{{ ex1rm }}</div>
+        </div>
+        <div data-status="{{ exStatus }}" style="display:flex;align-items:center;gap:6px;padding-bottom:6px">
+          <svg class="tri tri-up" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-tup"></use></svg>
+          <svg class="tri tri-grind" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-tup"></use></svg>
+          <svg class="tri tri-down" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-tdown"></use></svg>
+          <svg class="tri tri-flat" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-flat"></use></svg>
+          <span class="num" style="font-size:15px;font-weight:700">{{ exDelta }}</span>
+        </div>
+      </div>
+      <svg viewBox="0 0 100 30" preserveAspectRatio="none" style="width:100%;height:56px;margin-top:6px;overflow:visible">
+        <polyline points="{{ exSpark }}" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></polyline>
+      </svg>
+      <div style="display:flex;justify-content:space-between" class="micro">
+        <span>{{ exFirstDate }}</span><span>{{ exLastDate }}</span>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:9px;margin:14px 0 22px">
+      <div class="card" style="flex:1;padding:14px;gap:2px">
+        <div class="micro">Last time</div>
+        <div class="num" style="font-family:var(--font-heading);font-size:19px">{{ exLastLoad }}</div>
+        <div style="font-size:11.5px;opacity:.6">{{ exLastNote }}</div>
+      </div>
+      <div class="card" style="flex:1;padding:14px;gap:2px">
+        <div class="micro">RPE trend</div>
+        <div class="num" style="font-family:var(--font-heading);font-size:19px">{{ exRpeTrend }}</div>
+        <div style="font-size:11.5px;opacity:.6">{{ exRpeNote }}</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;padding:15px;border-radius:26px;background:color-mix(in srgb,var(--color-accent) 13%,transparent);margin-bottom:22px">
+      <div style="width:24px;height:24px;border-radius:999px;background:var(--color-accent);flex:none;display:grid;place-items:center;margin-top:1px"><span style="width:7px;height:7px;border-radius:999px;background:var(--color-bg);display:block"></span></div>
+      <p style="margin:0;font-size:13.5px;line-height:1.5">{{ exCoach }}</p>
+    </div>
+
+    <div class="micro" style="margin-bottom:6px">History</div>
+    <table class="table">
+      <thead><tr><th>Date</th><th>Load</th><th>RPE</th><th style="text-align:right">1RM</th></tr></thead>
+      <tbody>
+        <sc-for list="{{ exRows }}" as="r" hint-placeholder-count="5">
+          <tr>
+            <td style="opacity:.65;font-size:13px">{{ r.date }}</td>
+            <td class="num" style="font-size:13px">{{ r.load }}</td>
+            <td class="num" style="font-size:13px;opacity:.7">{{ r.rpe }}</td>
+            <td class="num" style="font-size:13px;text-align:right;font-weight:700">{{ r.e1rm }}</td>
+          </tr>
+        </sc-for>
+      </tbody>
+    </table>
+  </div>
+</div>
+</sc-if>
+
+<!-- ══ PROGRESS ══ -->
+<sc-if value="{{ isProgress }}" hint-placeholder-val="{{ false }}">
+<div class="screen" style="height:100%;display:flex;flex-direction:column;min-height:0">
+  <div style="flex:none;display:flex;align-items:center;gap:12px;padding:60px 18px 10px">
+    <button class="btn btn-secondary btn-icon" onClick="{{ goToday }}" style="width:36px;height:36px" aria-label="Back"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-back"></use></svg></button>
+    <div style="flex:1;font-size:12.5px;opacity:.55">Last 5 sessions</div>
+  </div>
+  <div class="scroll" style="flex:1;min-height:0;padding:0 18px 30px">
+    <h1 style="font-size:34px;margin:0 0 4px;letter-spacing:-.02em">Read-out</h1>
+    <p style="margin:0 0 8px;font-size:13.5px;opacity:.6">Numbers computed in code. The coach only judges them.</p>
+    <div style="display:flex;flex-direction:column;gap:11px;margin-top:14px">
+      <sc-for list="{{ progressCards }}" as="p" hint-placeholder-count="4">
+        <div class="card" style="padding:16px;gap:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <button class="btn btn-ghost" onClick="{{ p.open }}" style="flex:1;justify-content:flex-start;font-size:16.5px;color:var(--color-text);padding:0">{{ p.name }}</button>
+            <span class="tag {{ p.tagClass }}">{{ p.label }}</span>
+          </div>
+          <svg viewBox="0 0 100 26" preserveAspectRatio="none" style="width:100%;height:38px;overflow:visible">
+            <polyline points="{{ p.spark }}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" style="opacity:.75"></polyline>
+          </svg>
+          <div style="display:flex;align-items:center;gap:10px;margin:12px 0 11px;padding-top:11px;border-top:1px solid var(--color-divider)">
+            <span class="micro" style="flex:none">Computed</span>
+            <span class="num" style="font-size:12.5px;opacity:.8">{{ p.computed }}</span>
+            <span data-status="{{ p.status }}" style="margin-left:auto;display:flex;align-items:center;gap:5px">
+              <svg class="tri tri-up" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-tup"></use></svg>
+              <svg class="tri tri-grind" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-tup"></use></svg>
+              <svg class="tri tri-down" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-tdown"></use></svg>
+              <svg class="tri tri-flat" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-flat"></use></svg>
+              <span class="num" style="font-size:13px;font-weight:700">{{ p.delta }}</span>
+            </span>
+          </div>
+          <div style="display:flex;gap:9px">
+            <div style="width:21px;height:21px;border-radius:999px;background:var(--color-accent);flex:none;display:grid;place-items:center;margin-top:1px"><span style="width:6px;height:6px;border-radius:999px;background:var(--color-bg);display:block"></span></div>
+            <p style="margin:0;font-size:13px;line-height:1.5">{{ p.coach }}</p>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ══ SPOTIFY ══ -->
+<sc-if value="{{ isSpotify }}" hint-placeholder-val="{{ false }}">
+<div class="screen" style="height:100%;display:flex;flex-direction:column;min-height:0">
+  <div style="flex:none;display:flex;align-items:center;gap:12px;padding:60px 18px 10px">
+    <button class="btn btn-secondary btn-icon" onClick="{{ goToday }}" style="width:36px;height:36px" aria-label="Back"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-back"></use></svg></button>
+    <div style="flex:1;font-size:12.5px;opacity:.55">Now playing</div>
+    <span class="tag tag-accent-2">{{ deviceLabel }}</span>
+  </div>
+  <div class="scroll" style="flex:1;min-height:0;padding:14px 26px 30px;display:flex;flex-direction:column">
+    <div class="stripe washed elev-lg" style="width:100%;aspect-ratio:1;border-radius:34px;background-color:var(--color-accent-2);display:grid;place-items:center">
+      <span class="micro" style="opacity:.8;font-size:11px">album art</span>
+    </div>
+    <h2 style="font-size:26px;margin:22px 0 2px;letter-spacing:-.02em">{{ trackName }}</h2>
+    <p style="margin:0;font-size:14px;opacity:.6">{{ trackArtist }}</p>
+    <div style="margin:22px 0 8px;height:5px;border-radius:99px;background:color-mix(in srgb,var(--color-text) 14%,transparent);overflow:hidden">
+      <div style="height:100%;border-radius:99px;background:var(--color-accent);width:{{ trackPct }}"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between" class="micro"><span>{{ trackAt }}</span><span>{{ trackLen }}</span></div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:22px;margin-top:26px">
+      <button class="btn btn-icon" onClick="{{ prevTrack }}" style="width:52px;height:52px" aria-label="Previous"><svg width="22" height="22" fill="currentColor" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><use href="#i-prev"></use></svg></button>
+      <button class="btn btn-primary btn-icon" onClick="{{ togglePlay }}" style="width:68px;height:68px" aria-label="Play"><svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="{{ playIcon }}"></use></svg></button>
+      <button class="btn btn-icon" onClick="{{ nextTrack }}" style="width:52px;height:52px" aria-label="Next"><svg width="22" height="22" fill="currentColor" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><use href="#i-next"></use></svg></button>
+    </div>
+    <div class="micro" style="margin:30px 0 8px">Playlist</div>
+    <button class="row" onClick="{{ nextTrack }}" style="background:var(--color-surface)">
+      <svg width="18" height="18" fill="none" stroke="var(--color-accent-2)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><use href="#i-music"></use></svg>
+      <span style="flex:1;font-size:14px;font-weight:600">Heavy Chest Day</span>
+      <span class="micro">32 tracks</span>
+    </button>
+  </div>
+</div>
+</sc-if>
+
+<!-- ══ NOTION IMPORT ══ -->
+<sc-if value="{{ isImport }}" hint-placeholder-val="{{ false }}">
+<div class="screen" style="height:100%;display:flex;flex-direction:column;min-height:0">
+  <div style="flex:none;display:flex;align-items:center;gap:12px;padding:60px 18px 10px">
+    <button class="btn btn-secondary btn-icon" onClick="{{ goToday }}" style="width:36px;height:36px" aria-label="Back"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-back"></use></svg></button>
+    <div style="flex:1;font-size:12.5px;opacity:.55">{{ importStepLabel }}</div>
+  </div>
+  <div class="scroll" style="flex:1;min-height:0;padding:0 18px 30px">
+    <sc-if value="{{ imp0 }}" hint-placeholder-val="{{ false }}">
+      <div>
+        <h1 style="font-size:34px;margin:0 0 8px;letter-spacing:-.02em">Bring your history over</h1>
+        <p style="margin:0 0 20px;font-size:14px;opacity:.65;text-wrap:pretty">Paste your Notion log. The AI reads the dates, infers your rotation and the exercises you actually do. You confirm before anything is saved.</p>
+        <div class="field" style="margin-bottom:14px">
+          <label>Notion export or pasted text</label>
+          <textarea class="input" readonly style="min-height:170px;border-radius:26px;padding:14px 16px;font-size:12.5px;line-height:1.6;opacity:.75">31 Jul — Chest
+bench 82.5 5x5 rpe9 last set heavy
+incline db 32 3x10
+cable fly 17.5 3x12
+
+29 Jul — Legs
+squat 110 5x5 rpe8
+rdl 90 3x8</textarea>
+        </div>
+        <button class="btn btn-primary btn-block" onClick="{{ importNext }}" style="min-height:48px">Read it</button>
+        <p style="margin:12px 0 0;font-size:11.5px;opacity:.5;text-align:center">Re-runnable. Sessions already imported won't duplicate.</p>
+      </div>
+    </sc-if>
+    <sc-if value="{{ imp1 }}" hint-placeholder-val="{{ false }}">
+      <div style="padding-top:60px;text-align:center">
+        <div class="dot3" style="display:flex;gap:8px;justify-content:center;color:var(--color-accent);margin-bottom:22px"><span style="width:11px;height:11px"></span><span style="width:11px;height:11px"></span><span style="width:11px;height:11px"></span></div>
+        <h2 style="font-size:25px;margin:0 0 6px">Reading 142 blocks</h2>
+        <p style="margin:0;font-size:13.5px;opacity:.6">Parsing dates, exercises, loads and RPE.</p>
+      </div>
+    </sc-if>
+    <sc-if value="{{ imp2 }}" hint-placeholder-val="{{ false }}">
+      <div>
+        <h1 style="font-size:32px;margin:0 0 8px;letter-spacing:-.02em">Confirm what it found</h1>
+        <p style="margin:0 0 18px;font-size:13.5px;opacity:.62">Nothing is saved until you say so.</p>
+        <div class="card" style="padding:16px;margin-bottom:11px">
+          <div class="micro">Inferred rotation</div>
+          <div class="xscroll" style="display:flex;gap:7px;align-items:center;padding-top:4px">
+            <sc-for list="{{ rotation }}" as="d" hint-placeholder-count="4">
+              <span class="pill" style="border-color:var(--color-accent)">{{ d.name }}</span>
+            </sc-for>
+          </div>
+        </div>
+        <div class="card" style="padding:16px;margin-bottom:11px;gap:9px">
+          <div class="micro">Found</div>
+          <sc-for list="{{ importFound }}" as="f" hint-placeholder-count="3">
+            <div style="display:flex;align-items:baseline;gap:10px">
+              <span class="num" style="font-family:var(--font-heading);font-size:23px;min-width:52px">{{ f.n }}</span>
+              <span style="font-size:13.5px;opacity:.7">{{ f.what }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div class="card" style="padding:16px;margin-bottom:16px;gap:7px">
+          <div class="micro">Needs your eye</div>
+          <sc-for list="{{ importFlags }}" as="w" hint-placeholder-count="2">
+            <div style="display:flex;gap:9px;align-items:flex-start">
+              <span style="width:6px;height:6px;border-radius:99px;background:var(--color-accent);flex:none;margin-top:7px"></span>
+              <span style="font-size:13px;line-height:1.5">{{ w }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <button class="btn btn-primary btn-block" onClick="{{ importNext }}" style="min-height:48px">Save to my log</button>
+        <button class="btn btn-secondary btn-block" onClick="{{ importReset }}" style="min-height:44px">Start over</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{ imp3 }}" hint-placeholder-val="{{ false }}">
+      <div style="padding-top:50px;text-align:center">
+        <div style="width:76px;height:76px;border-radius:999px;background:var(--color-accent-2);display:grid;place-items:center;margin:0 auto 22px">
+          <svg width="34" height="34" fill="none" stroke="var(--color-bg)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"></use></svg>
+        </div>
+        <h2 style="font-size:27px;margin:0 0 6px">38 sessions saved</h2>
+        <p style="margin:0 0 24px;font-size:13.5px;opacity:.62">412 sets, back to 12 March. Your split is live.</p>
+        <button class="btn btn-primary" onClick="{{ goToday }}" style="min-height:46px;padding-inline:26px">See today</button>
+      </div>
+    </sc-if>
+  </div>
+</div>
+</sc-if>
+
+<!-- ══ SETTINGS ══ -->
+<sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+<div class="screen" style="height:100%;display:flex;flex-direction:column;min-height:0">
+  <div style="flex:none;display:flex;align-items:center;gap:12px;padding:60px 18px 10px">
+    <button class="btn btn-secondary btn-icon" onClick="{{ goToday }}" style="width:36px;height:36px" aria-label="Back"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-back"></use></svg></button>
+    <div style="flex:1;font-size:12.5px;opacity:.55">One user · your data</div>
+  </div>
+  <div class="scroll" style="flex:1;min-height:0;padding:0 18px 30px">
+    <h1 style="font-size:34px;margin:0 0 22px;letter-spacing:-.02em">Settings</h1>
+
+    <div class="micro" style="margin-bottom:9px">Appearance</div>
+    <div class="card" style="padding:14px 16px;margin-bottom:20px;flex-direction:row;align-items:center;gap:14px">
+      <div style="flex:1">
+        <div style="font-size:14.5px;font-weight:600">Theme</div>
+        <div style="font-size:11.5px;opacity:.55">{{ themeLabel }}</div>
+      </div>
+      <button class="thm" onClick="{{ toggleTheme }}" aria-label="Toggle theme">
+        <div class="thm-knob"></div>
+        <span class="thm-ic thm-sun"><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-sun"></use></svg></span>
+        <span class="thm-ic thm-moon"><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-moon"></use></svg></span>
+      </button>
+    </div>
+
+    <div class="micro" style="margin-bottom:9px">Training</div>
+    <div class="card" style="padding:16px;margin-bottom:11px;gap:10px">
+      <div style="font-size:14.5px;font-weight:600">Units</div>
+      <div class="seg2" data-val="{{ units }}"><button data-opt="kg" onClick="{{ setKg }}">Kilograms</button><button data-opt="lb" onClick="{{ setLb }}">Pounds</button></div>
+    </div>
+    <div class="card" style="padding:16px;margin-bottom:11px;gap:10px">
+      <div>
+        <div style="font-size:14.5px;font-weight:600">Ask for RPE</div>
+        <div style="font-size:11.5px;opacity:.55">Off keeps logging fast; trends fall back to est-1RM and volume.</div>
+      </div>
+      <div class="seg2" data-val="{{ rpeAsk }}"><button data-opt="on" onClick="{{ setRpeOn }}">On</button><button data-opt="off" onClick="{{ setRpeOff }}">Off</button></div>
+    </div>
+    <div class="card" style="padding:16px;margin-bottom:20px;gap:9px">
+      <div>
+        <div style="font-size:14.5px;font-weight:600">Next in rotation</div>
+        <div style="font-size:11.5px;opacity:.55">Rotation-based, not calendar. Override if you skipped one.</div>
+      </div>
+      <div class="xscroll" style="display:flex;gap:7px;padding-top:2px">
+        <sc-for list="{{ rotation }}" as="d" hint-placeholder-count="4">
+          <button class="pill" data-active="{{ d.active }}" onClick="{{ d.setNext }}">{{ d.name }}</button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div class="micro" style="margin-bottom:9px">Coach</div>
+    <div class="card" style="padding:16px;margin-bottom:20px;gap:10px">
+      <div>
+        <div style="font-size:14.5px;font-weight:600">Voice</div>
+        <div style="font-size:11.5px;opacity:.55">{{ voiceNote }}</div>
+      </div>
+      <div class="seg2" data-val="{{ voice }}"><button data-opt="direct" onClick="{{ setDirect }}">Direct</button><button data-opt="detailed" onClick="{{ setDetailed }}">Detailed</button></div>
+    </div>
+
+    <div class="micro" style="margin-bottom:9px">Connections</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="row" style="background:var(--color-surface);cursor:default">
+        <span style="flex:1;font-size:14px;font-weight:600">Google account</span>
+        <span class="tag tag-accent-2">Signed in</span>
+      </div>
+      <button class="row" onClick="{{ goSpotify }}" style="background:var(--color-surface)">
+        <span style="flex:1;font-size:14px;font-weight:600">Spotify</span>
+        <span class="tag tag-accent-2">{{ deviceLabel }}</span>
+        <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="opacity:.4"><use href="#i-chev"></use></svg>
+      </button>
+      <button class="row" onClick="{{ goImport }}" style="background:var(--color-surface)">
+        <span style="flex:1;font-size:14px;font-weight:600">Notion import</span>
+        <span class="tag tag-neutral">38 sessions</span>
+        <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="opacity:.4"><use href="#i-chev"></use></svg>
+      </button>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ══ MENU SHEET ══ -->
+<sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+  <button class="scrim" onClick="{{ closeSheet }}" aria-label="Close"></button>
+  <div class="sheet">
+    <div style="width:42px;height:4px;border-radius:99px;background:var(--color-divider);margin:0 auto 12px"></div>
+    <div style="display:flex;flex-direction:column;gap:2px">
+      <button class="row" onClick="{{ goProgress }}"><svg width="20" height="20" fill="none" stroke="var(--color-accent)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-pulse"></use></svg><span style="flex:1;font-size:15px;font-weight:600">Progress read-out</span><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><use href="#i-chev"></use></svg></button>
+      <button class="row" onClick="{{ goChat }}"><svg width="20" height="20" fill="none" stroke="var(--color-accent)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chat"></use></svg><span style="flex:1;font-size:15px;font-weight:600">Coach</span><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><use href="#i-chev"></use></svg></button>
+      <button class="row" onClick="{{ goSpotify }}"><svg width="20" height="20" fill="none" stroke="var(--color-accent)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-music"></use></svg><span style="flex:1;font-size:15px;font-weight:600">Music</span><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><use href="#i-chev"></use></svg></button>
+      <button class="row" onClick="{{ goImport }}"><svg width="20" height="20" fill="none" stroke="var(--color-accent)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-import"></use></svg><span style="flex:1;font-size:15px;font-weight:600">Import my Notion</span><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><use href="#i-chev"></use></svg></button>
+      <button class="row" onClick="{{ goSettings }}"><svg width="20" height="20" fill="none" stroke="var(--color-accent)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-cog"></use></svg><span style="flex:1;font-size:15px;font-weight:600">Settings</span><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35"><use href="#i-chev"></use></svg></button>
+    </div>
+  </div>
+</sc-if>
+
+<!-- ══ PARSE CONFIRM SHEET ══ -->
+<sc-if value="{{ parseOpen }}" hint-placeholder-val="{{ false }}">
+  <button class="scrim" onClick="{{ closeSheet }}" aria-label="Close"></button>
+  <div class="sheet">
+    <div style="width:42px;height:4px;border-radius:99px;background:var(--color-divider);margin:0 auto 16px"></div>
+    <div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">
+      <div style="width:21px;height:21px;border-radius:999px;background:var(--color-accent);flex:none;display:grid;place-items:center"><span style="width:6px;height:6px;border-radius:999px;background:var(--color-surface);display:block"></span></div>
+      <span class="micro">Parsed — check before saving</span>
+    </div>
+    <p style="margin:0 0 14px;font-size:12.5px;opacity:.5;font-style:italic">“{{ parseRaw }}”</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">
+      <sc-for list="{{ parseFields }}" as="f" hint-placeholder-count="4">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:20px;background:var(--color-bg)">
+          <span class="micro" style="flex:none;width:78px">{{ f.k }}</span>
+          <span class="num" style="flex:1;font-size:15px;font-weight:700">{{ f.v }}</span>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin:0 0 14px;font-size:11.5px;opacity:.5;text-align:center">{{ parseNote }}</p>
+    <div style="display:flex;gap:9px">
+      <button class="btn btn-secondary" onClick="{{ closeSheet }}" style="flex:1;min-height:48px">Edit</button>
+      <button class="btn btn-primary" onClick="{{ confirmSave }}" style="flex:2;min-height:48px"><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"></use></svg>Save {{ parseCount }}</button>
+    </div>
+  </div>
+</sc-if>
+
+</div>
+</x-import>
+
+<p style="margin:0;font-size:12px;color:#8a8a8a;font-family:var(--font-body);text-align:center">Tap the sun / moon to switch themes · now-playing lives in the island · type in the bar to log or ask</p>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:520,&quot;height&quot;:1010},&quot;initialTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light'|'dark'&quot;,&quot;section&quot;:&quot;Demo&quot;},&quot;startScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;today&quot;,&quot;chat&quot;,&quot;exercise&quot;,&quot;progress&quot;,&quot;spotify&quot;,&quot;import&quot;,&quot;settings&quot;],&quot;default&quot;:&quot;today&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Demo&quot;},&quot;showSpotify&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Features&quot;},&quot;units&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;kg&quot;,&quot;lb&quot;],&quot;default&quot;:&quot;kg&quot;,&quot;tsType&quot;:&quot;'kg'|'lb'&quot;,&quot;section&quot;:&quot;Features&quot;}}">
+const EX = {
+  'Bench Press': { group: 'Chest · compound', hist: [
+    { date: 'Jul 3', w: 77.5, sets: 5, reps: 5, rpe: 8, note: 'smooth' },
+    { date: 'Jul 10', w: 80, sets: 5, reps: 5, rpe: 8, note: 'solid' },
+    { date: 'Jul 17', w: 80, sets: 5, reps: 5, rpe: 8.5, note: 'last set slowed' },
+    { date: 'Jul 24', w: 82.5, sets: 4, reps: 4, rpe: 9, note: 'grindy' },
+    { date: 'Jul 31', w: 82.5, sets: 5, reps: 5, rpe: 9, note: 'last set heavy' },
+  ]},
+  'Incline Dumbbell Press': { group: 'Chest · accessory', hist: [
+    { date: 'Jul 17', w: 30, sets: 3, reps: 10, rpe: 8, note: 'clean' },
+    { date: 'Jul 24', w: 32, sets: 3, reps: 9, rpe: 8, note: 'ok' },
+    { date: 'Jul 31', w: 32, sets: 3, reps: 10, rpe: 8, note: 'easier' },
+  ]},
+  'Cable Fly': { group: 'Chest · isolation', hist: [
+    { date: 'Jul 17', w: 15, sets: 3, reps: 12, rpe: null, note: '' },
+    { date: 'Jul 24', w: 17.5, sets: 3, reps: 12, rpe: null, note: '' },
+    { date: 'Jul 31', w: 17.5, sets: 3, reps: 12, rpe: 7, note: 'good stretch' },
+  ]},
+  'Weighted Dip': { group: 'Chest · compound', hist: [
+    { date: 'Jul 17', w: 10, sets: 3, reps: 8, rpe: 8, note: '' },
+    { date: 'Jul 24', w: 12.5, sets: 3, reps: 8, rpe: 8.5, note: '' },
+    { date: 'Jul 31', w: 15, sets: 3, reps: 8, rpe: 8.5, note: 'strong' },
+  ]},
+  'Barbell Row': { group: 'Back · compound', hist: [
+    { date: 'Jul 4', w: 70, sets: 4, reps: 8, rpe: 8 },
+    { date: 'Jul 11', w: 72.5, sets: 4, reps: 8, rpe: 8 },
+    { date: 'Jul 18', w: 75, sets: 4, reps: 8, rpe: 8 },
+    { date: 'Jul 25', w: 77.5, sets: 4, reps: 8, rpe: 8 },
+    { date: 'Aug 1', w: 80, sets: 4, reps: 8, rpe: 8 },
+  ]},
+  'Overhead Press': { group: 'Arms · compound', hist: [
+    { date: 'Jul 6', w: 47.5, sets: 5, reps: 5, rpe: 8 },
+    { date: 'Jul 13', w: 47.5, sets: 5, reps: 5, rpe: 8 },
+    { date: 'Jul 20', w: 50, sets: 5, reps: 4, rpe: 9 },
+    { date: 'Jul 27', w: 47.5, sets: 5, reps: 5, rpe: 8.5 },
+    { date: 'Aug 3', w: 47.5, sets: 5, reps: 5, rpe: 8.5 },
+  ]},
+  'Back Squat': { group: 'Legs · compound', hist: [
+    { date: 'Jul 8', w: 105, sets: 5, reps: 5, rpe: 8 },
+    { date: 'Jul 15', w: 107.5, sets: 5, reps: 5, rpe: 8 },
+    { date: 'Jul 22', w: 110, sets: 5, reps: 5, rpe: 8 },
+    { date: 'Jul 29', w: 110, sets: 5, reps: 5, rpe: 7.5 },
+    { date: 'Aug 5', w: 115, sets: 5, reps: 5, rpe: 8 },
+  ]},
+};
+
+const ALIAS = [
+  ['incline', 'Incline Dumbbell Press'], ['bench', 'Bench Press'], ['fly', 'Cable Fly'],
+  ['flye', 'Cable Fly'], ['dip', 'Weighted Dip'], ['row', 'Barbell Row'],
+  ['squat', 'Back Squat'], ['ohp', 'Overhead Press'], ['overhead', 'Overhead Press'],
+  ['shoulder press', 'Overhead Press'],
+];
+
+const ROT = ['Chest', 'Back', 'Arms', 'Legs'];
+const PLAN = ['Bench Press', 'Incline Dumbbell Press', 'Cable Fly', 'Weighted Dip'];
+const TRACKS = [
+  { name: 'Iron Lung', artist: 'Gravel Choir', len: '3:48', at: '1:12', pct: 31 },
+  { name: 'Slow Burn Ritual', artist: 'North Facing', len: '4:22', at: '0:41', pct: 16 },
+  { name: 'Chalk Dust', artist: 'Meridian Set', len: '3:05', at: '2:18', pct: 74 },
+];
+
+const epley = (w, r) => w * (1 + r / 30);
+const r1 = n => Math.round(n * 10) / 10;
+
+function readOut(name) {
+  const h = EX[name].hist;
+  const e = h.map(s => epley(s.w, s.reps));
+  const first = e[0], last = e[e.length - 1];
+  const pct = ((last - first) / first) * 100;
+  const rpes = h.map(s => s.rpe).filter(v => v !== null && v !== undefined);
+  const rpeDelta = rpes.length > 1 ? rpes[rpes.length - 1] - rpes[0] : 0;
+  let status = 'flat';
+  if (pct >= 2.5) status = rpeDelta > 0.25 ? 'grind' : 'up';
+  else if (pct < -2.5) status = 'down';
+  const min = Math.min.apply(null, e), max = Math.max.apply(null, e);
+  const span = max - min || 1;
+  return {
+    hist: h, e1rm: last, pct, rpeDelta, status, rpes,
+    spark: (hgt) => e.map((v, i) =>
+      (i / (e.length - 1) * 100).toFixed(1) + ',' + (hgt - 2 - ((v - min) / span) * (hgt - 4)).toFixed(1)
+    ).join(' '),
+  };
+}
+
+const THINKING = [
+  'Locking in…', 'Cooking…', 'Running the numbers…', 'Reading the tape…',
+  'No glazing…', 'Mogging your last set…', 'Weighing it up…',
+  'Doing the math…', 'Chasing the pump…', 'Checking your ego…',
+];
+
+const LABEL = { up: 'Progressing', grind: 'Grinding', flat: 'Stalling', down: 'Regressing' };
+const TAGC = { up: 'tag-accent-2', grind: 'tag-accent', flat: 'tag-neutral', down: 'tag-accent' };
+
+const COACH = {
+  'Bench Press': 'Up 6.5% in four weeks, but RPE went 8 → 9 for the same work. That is grinding, not progressing. Drop to 72.5 for a week, then come back at 82.5 and it should feel like an 8.',
+  'Barbell Row': 'Clean 14% over five sessions at a flat RPE 8. Nothing to fix. Keep adding 2.5 kg a week until the last set slows down.',
+  'Overhead Press': 'Flat for five weeks. You went to 50, missed reps, and backed off. Change the stimulus: 3×8 at 42.5 for two weeks, then retest the 5×5.',
+  'Back Squat': 'Up 9.5% and RPE actually fell at 110 before you jumped to 115. Bar speed is there. Push it — 117.5 next.',
+  'Incline Dumbbell Press': 'Same load, one more rep, same RPE. Real progress, just small. Move to 34 when you hit 3×10 at RPE 7.',
+  'Cable Fly': 'Isolation with almost no RPE logged, so the trend is coarse. Load is stable. Fine as it is.',
+  'Weighted Dip': 'Added weight went 10 → 15 in three sessions, est 1RM up 50%, RPE holding at 8.5. Fastest mover you have. Keep going.',
+};
+
+class Component extends DCLogic {
+  state = {
+    theme: this.props.initialTheme || 'light',
+    screen: this.props.startScreen || 'today',
+    prev: 'today',
+    sheet: null,
+    parsed: null,
+    raw: '',
+    logged: [],
+    activeEx: 'Bench Press',
+    typing: false,
+    thinkI: 0,
+    msgs: [
+      { id: 1, who: 'coach', text: 'Chest day. Last time you benched 82.5 for 5×5 at RPE 9 — that was already heavy. Start at 72.5 today.' },
+    ],
+    playing: true,
+    track: 0,
+    imp: 0,
+    units: this.props.units || 'kg',
+    voice: 'direct',
+    rpeAsk: 'on',
+    nextDay: 'Chest',
+  };
+
+  draftRef = React.createRef();
+  chatRef = React.createRef();
+  chatScrollRef = React.createRef();
+  msgId = 2;
+
+  componentDidUpdate(_p, prev) {
+    if (this.state.msgs.length !== prev.msgs.length || this.state.typing !== prev.typing) {
+      const el = this.chatScrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    }
+  }
+
+  componentWillUnmount() { clearTimeout(this._t); clearTimeout(this._i); clearInterval(this._w); }
+
+  go = s => this.setState(st => ({ screen: s, prev: st.screen === s ? st.prev : st.screen, sheet: null }));
+
+  parse(text) {
+    const t = text.toLowerCase().trim();
+    const q = /\?|^(what|why|how|should|am|is|are|can|when|do|does|give|tell)\b/.test(t);
+    let name = null;
+    for (const [k, v] of ALIAS) if (t.indexOf(k) >= 0) { name = v; break; }
+    const sr = t.match(/(\d+)\s*[x×]\s*(\d+)/);
+    const nums = t.match(/(\d+(?:\.\d+)?)\s*(?:kg|kgs)?/g) || [];
+    const rpeM = t.match(/(?:@|rpe\s*)(\d+(?:\.\d+)?)/);
+    let weight = null;
+    const wm = t.match(/(\d+(?:\.\d+)?)\s*kg/) || (nums.length ? t.match(/(\d+(?:\.\d+)?)/) : null);
+    if (wm) weight = parseFloat(wm[1]);
+    if (q || !name || weight === null || !sr) return null;
+    const noteM = t.match(/,\s*(.+)$/);
+    return {
+      name, weight, sets: parseInt(sr[1], 10), reps: parseInt(sr[2], 10),
+      rpe: rpeM ? parseFloat(rpeM[1]) : null,
+      note: noteM ? noteM[1].trim() : '',
+    };
+  }
+
+  reply(text) {
+    const t = text.toLowerCase();
+    if (/today|what's on|whats on|plan/.test(t))
+      return 'Chest, next in the rotation after Monday\'s legs. Bench 5×5, incline DB 3×10, cable fly 3×12, dips 3×8. Bench was 82.5 at RPE 9 last time.';
+    if (/deload|stall|grind/.test(t)) return COACH['Bench Press'];
+    if (/rpe/.test(t))
+      return 'Reps left in the tank. 10 is failure, 9 is one left, 8 is two. Log it when you want a sharper trend, skip it when you are moving fast — the trend falls back to est-1RM and volume.';
+    if (/squat/.test(t)) return COACH['Back Squat'];
+    if (/row|back/.test(t)) return COACH['Barbell Row'];
+    if (/ohp|overhead|shoulder/.test(t)) return COACH['Overhead Press'];
+    if (/bench|chest/.test(t)) return COACH['Bench Press'];
+    if (/progress|how am i|read/.test(t))
+      return 'Two moving, one grinding, one stuck. Row +14% and squat +9.5% at flat RPE. Bench is up 6.5% but RPE climbed 8 → 9 — deload it. Overhead press has not moved in five weeks.';
+    return 'I only judge what is in the log. Ask me about an exercise by name, or what is on today.';
+  }
+
+  say = (text) => {
+    const mine = { id: this.msgId++, who: 'user', text };
+    this.setState(s => ({
+      msgs: s.msgs.concat(mine), typing: true, screen: 'chat', sheet: null,
+      thinkI: Math.floor(Math.random() * THINKING.length),
+    }));
+    clearTimeout(this._t);
+    clearInterval(this._w);
+    this._w = setInterval(() => this.setState(s => ({ thinkI: s.thinkI + 1 })), 1050);
+    this._t = setTimeout(() => {
+      clearInterval(this._w);
+      const r = { id: this.msgId++, who: 'coach', text: this.reply(text) };
+      this.setState(s => ({ msgs: s.msgs.concat(r), typing: false }));
+    }, 2400);
+  };
+
+  submit = (ref) => {
+    const el = ref.current;
+    if (!el) return;
+    const v = el.value.trim();
+    if (!v) return;
+    el.value = '';
+    const p = this.parse(v);
+    if (p) this.setState({ parsed: p, raw: v, sheet: 'parse' });
+    else this.say(v);
+  };
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const ro = readOut(st.activeEx);
+    const h = ro.hist;
+    const last = h[h.length - 1];
+    const u = st.units;
+    const cv = w => u === 'lb' ? Math.round(w * 2.2046 * 2) / 2 : w;
+    const load = s => cv(s.w) + ' ' + u + ' × ' + s.sets + '×' + s.reps;
+    const p = st.parsed || {};
+
+    const progress = ['Bench Press', 'Barbell Row', 'Overhead Press', 'Back Squat'].map(n => {
+      const r = readOut(n);
+      return {
+        name: n, status: r.status, label: LABEL[r.status], tagClass: TAGC[r.status],
+        spark: r.spark(26), coach: COACH[n],
+        delta: (r.pct >= 0 ? '+' : '') + r1(r.pct) + '%',
+        computed: 'est 1RM ' + r1(r.e1rm) + ' ' + u + ' · RPE ' +
+          (r.rpes.length ? r.rpes[0] + ' → ' + r.rpes[r.rpes.length - 1] : 'not logged'),
+        open: () => this.setState({ activeEx: n, screen: 'exercise', prev: 'progress' }),
+      };
+    });
+
+    return {
+      frameW: 402, frameH: 874, theme: st.theme, isDark: dark,
+      themeLabel: dark ? 'Night — black ground' : 'Light — white ground',
+      toggleTheme: () => this.setState(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
+
+      isToday: st.screen === 'today', isChat: st.screen === 'chat',
+      isExercise: st.screen === 'exercise', isProgress: st.screen === 'progress',
+      isSpotify: st.screen === 'spotify', isImport: st.screen === 'import',
+      isSettings: st.screen === 'settings',
+      menuOpen: st.sheet === 'menu', parseOpen: st.sheet === 'parse',
+      openMenu: () => this.setState({ sheet: 'menu' }),
+      closeSheet: () => this.setState({ sheet: null }),
+      goToday: () => this.go('today'), goChat: () => this.go('chat'),
+      goProgress: () => this.go('progress'), goSpotify: () => this.go('spotify'),
+      goImport: () => this.go('import'), goSettings: () => this.go('settings'),
+      back: () => this.go(st.prev),
+
+      dayTitle: st.nextDay + ' day',
+      daySub: 'Next after Wednesday\'s legs · last ' + st.nextDay.toLowerCase() + ' session Jul 31',
+      rotation: ROT.map(d => ({
+        name: d, active: d === st.nextDay ? 'true' : 'false',
+        setNext: () => this.setState({ nextDay: d }),
+      })),
+      todayPlan: PLAN.map(n => {
+        const hh = EX[n].hist, l = hh[hh.length - 1];
+        return {
+          name: n, last: load(l) + (l.rpe ? ' · RPE ' + l.rpe : ' · no RPE'),
+          est: r1(cv(epley(l.w, l.reps))) + ' ' + u,
+          open: () => this.setState({ activeEx: n, screen: 'exercise', prev: 'today' }),
+        };
+      }),
+      hasLogged: st.logged.length > 0,
+      loggedToday: st.logged,
+
+      chips: [
+        { label: "What's today?", go: () => this.say("What's today?") },
+        { label: 'Am I stalling?', go: () => this.say('Am I stalling on bench?') },
+        { label: 'What is RPE?', go: () => this.say('What is RPE again?') },
+      ],
+      draftRef: this.draftRef, chatRef: this.chatRef, chatScrollRef: this.chatScrollRef,
+      sendDraft: () => this.submit(this.draftRef),
+      sendChat: () => this.submit(this.chatRef),
+      onDraftKey: e => { if (e.key === 'Enter') { e.preventDefault(); this.submit(this.draftRef); } },
+      onChatKey: e => { if (e.key === 'Enter') { e.preventDefault(); this.submit(this.chatRef); } },
+      messages: st.msgs, typing: st.typing,
+      thinkWord: React.createElement('span', {
+        key: st.thinkI, className: 'tw',
+      }, THINKING[st.thinkI % THINKING.length]),
+
+      exName: st.activeEx, exGroup: EX[st.activeEx].group,
+      ex1rm: r1(cv(ro.e1rm)) + ' ' + u,
+      exDelta: (ro.pct >= 0 ? '+' : '') + r1(ro.pct) + '%',
+      exStatus: ro.status, exSpark: ro.spark(30),
+      exFirstDate: h[0].date, exLastDate: last.date,
+      exLastLoad: load(last),
+      exLastNote: last.note ? '“' + last.note + '”' : 'no note',
+      exRpeTrend: ro.rpes.length ? ro.rpes[0] + ' → ' + ro.rpes[ro.rpes.length - 1] : 'not logged',
+      exRpeNote: ro.rpes.length
+        ? (ro.rpeDelta > 0.25 ? 'harder for the same work' : ro.rpeDelta < -0.25 ? 'easier for the same work' : 'holding steady')
+        : 'trend uses volume only',
+      exCoach: COACH[st.activeEx],
+      exRows: h.slice().reverse().map(s => ({
+        date: s.date, load: load(s), rpe: s.rpe === null || s.rpe === undefined ? '—' : s.rpe,
+        e1rm: r1(cv(epley(s.w, s.reps))),
+      })),
+      progressCards: progress,
+
+      showMusic: this.props.showSpotify !== false,
+      showIsland: this.props.showSpotify !== false && st.screen !== 'spotify',
+      isPlaying: st.playing ? 'true' : 'false',
+      trackName: TRACKS[st.track].name, trackArtist: TRACKS[st.track].artist,
+      trackLen: TRACKS[st.track].len, trackAt: TRACKS[st.track].at,
+      trackPct: TRACKS[st.track].pct + '%',
+      playIcon: st.playing ? '#i-pause' : '#i-play',
+      deviceLabel: st.playing ? 'iPhone · active' : 'No active device',
+      togglePlay: e => { if (e && e.stopPropagation) e.stopPropagation(); this.setState(s => ({ playing: !s.playing })); },
+      nextTrack: e => { if (e && e.stopPropagation) e.stopPropagation(); this.setState(s => ({ track: (s.track + 1) % TRACKS.length, playing: true })); },
+      prevTrack: () => this.setState(s => ({ track: (s.track + TRACKS.length - 1) % TRACKS.length, playing: true })),
+
+      imp0: st.imp === 0, imp1: st.imp === 1, imp2: st.imp === 2, imp3: st.imp === 3,
+      importStepLabel: ['One-time import', 'Reading…', 'Step 2 of 2 · confirm', 'Done'][st.imp],
+      importFound: [
+        { n: '38', what: 'dated sessions, back to 12 March' },
+        { n: '412', what: 'sets across 19 exercises' },
+        { n: '4', what: 'day rotation, repeated 9 times' },
+      ],
+      importFlags: [
+        '3 sets have no weight — "bench, felt strong". They will import as notes, not numbers.',
+        'RPE appears on 61% of sets. Trends for the rest fall back to est-1RM and volume.',
+      ],
+      importNext: () => {
+        if (st.imp === 0) {
+          this.setState({ imp: 1 });
+          clearTimeout(this._i);
+          this._i = setTimeout(() => this.setState({ imp: 2 }), 1600);
+        } else if (st.imp === 2) this.setState({ imp: 3 });
+      },
+      importReset: () => this.setState({ imp: 0 }),
+
+      parseRaw: st.raw,
+      parseCount: p.sets ? p.sets + ' sets' : 'set',
+      parseFields: st.parsed ? [
+        { k: 'Exercise', v: p.name },
+        { k: 'Weight', v: cv(p.weight) + ' ' + u },
+        { k: 'Sets × reps', v: p.sets + ' × ' + p.reps },
+        { k: 'RPE', v: p.rpe === null ? 'not logged' : p.rpe },
+        { k: 'est 1RM', v: r1(cv(epley(p.weight, p.reps))) + ' ' + u },
+      ].concat(p.note ? [{ k: 'Note', v: p.note }] : []) : [],
+      parseNote: st.parsed && p.rpe === null
+        ? 'No RPE — trend will use est-1RM and volume only.'
+        : 'Nothing is saved until you confirm.',
+      confirmSave: () => {
+        const q = st.parsed;
+        this.setState(s => ({
+          sheet: null, parsed: null,
+          logged: s.logged.concat([{
+            name: q.name,
+            summary: cv(q.weight) + ' ' + u + ' × ' + q.sets + '×' + q.reps + (q.rpe ? ' · RPE ' + q.rpe : ''),
+          }]),
+          screen: 'today',
+        }));
+      },
+
+      units: st.units,
+      setKg: () => this.setState({ units: 'kg' }),
+      setLb: () => this.setState({ units: 'lb' }),
+      rpeAsk: st.rpeAsk,
+      setRpeOn: () => this.setState({ rpeAsk: 'on' }),
+      setRpeOff: () => this.setState({ rpeAsk: 'off' }),
+      voice: st.voice,
+      voiceNote: st.voice === 'direct' ? 'Short, evidence-first, no hedging.' : 'Same calls, with the reasoning spelled out.',
+      setDirect: () => this.setState({ voice: 'direct' }),
+      setDetailed: () => this.setState({ voice: 'detailed' }),
+    };
+  }
+}
+
+</script>
+</body>
+</html>
