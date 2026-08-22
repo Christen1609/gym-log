@@ -106,12 +106,6 @@ export const ALIAS: [string, string][] = [
 export const ROT = ["Chest", "Back", "Arms", "Legs"];
 export const PLAN = ["Bench Press", "Incline Dumbbell Press", "Cable Fly", "Weighted Dip"];
 
-export const TRACKS = [
-  { name: "Iron Lung", artist: "Gravel Choir", len: "3:48", at: "1:12", pct: 31 },
-  { name: "Slow Burn Ritual", artist: "North Facing", len: "4:22", at: "0:41", pct: 16 },
-  { name: "Chalk Dust", artist: "Meridian Set", len: "3:05", at: "2:18", pct: 74 },
-];
-
 export const THINKING = [
   "Locking in…",
   "Cooking…",

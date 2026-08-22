@@ -8,7 +8,6 @@ import {
   PROGRESS_EXERCISES,
   ROT,
   THINKING,
-  TRACKS,
   Units,
   epley,
   findLatestSession,
@@ -25,9 +24,8 @@ import {
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, getSupabaseClient } from "@/lib/supabase";
 import { loadHistory, saveSet, seedIfEmpty } from "@/lib/db";
-import { useSpotify } from "@/lib/spotify";
 
-export type Screen = "today" | "chat" | "exercise" | "progress" | "spotify" | "import" | "settings";
+export type Screen = "today" | "chat" | "exercise" | "progress" | "import" | "settings";
 export type Sheet = "menu" | "parse" | null;
 export type Theme = "light" | "dark";
 export type Voice = "direct" | "detailed";
@@ -100,9 +98,6 @@ export function useGymLog() {
   const thinkTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const thinkInterval = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
-  const [playing, setPlaying] = useState(true);
-  const [track, setTrack] = useState(0);
-  const spotify = useSpotify(screen === "spotify");
 
   const [imp, setImp] = useState(0);
   const importTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -351,16 +346,6 @@ export function useGymLog() {
     }
   }, [parsed, units, authed]);
 
-  const togglePlay = useCallback(() => setPlaying((p) => !p), []);
-  const nextTrack = useCallback(() => {
-    setTrack((t) => (t + 1) % TRACKS.length);
-    setPlaying(true);
-  }, []);
-  const prevTrack = useCallback(() => {
-    setTrack((t) => (t + TRACKS.length - 1) % TRACKS.length);
-    setPlaying(true);
-  }, []);
-
   const importNext = useCallback(() => {
     setImp((cur) => {
       if (cur === 0) {
@@ -456,12 +441,6 @@ export function useGymLog() {
     cv,
     openExercise,
     progressCards,
-    playing,
-    track: TRACKS[track],
-    togglePlay,
-    nextTrack,
-    prevTrack,
-    spotify,
     imp,
     importNext,
     importReset,

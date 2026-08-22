@@ -106,11 +106,6 @@ export function SettingsScreen({ state }: { state: GymLogState }) {
               <span className="tag tag-accent-2">Not connected</span>
             </div>
           )}
-          <button className="row" onClick={() => state.go("spotify")} style={{ background: "var(--color-surface)" }}>
-            <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>Spotify</span>
-            <span className="tag tag-accent-2">{state.playing ? "iPhone · active" : "No active device"}</span>
-            <Icon name="chev" size={17} style={{ opacity: 0.4 }} />
-          </button>
           <button className="row" onClick={() => state.go("import")} style={{ background: "var(--color-surface)" }}>
             <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>Notion import</span>
             <span className="tag tag-neutral">{state.logged.length} logged this session</span>
