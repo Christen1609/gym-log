@@ -166,6 +166,90 @@ export const round1 = (n: number) => Math.round(n * 10) / 10;
 export const toDisplayWeight = (w: number, units: Units) =>
   units === "lb" ? Math.round(w * 2.2046 * 2) / 2 : w;
 
+export interface TodayInfo {
+  iso: string;
+  weekday: string;
+  shortDate: string;
+  label: string;
+}
+
+export interface LastSessionInfo {
+  day: string;
+  date: string;
+  exercise: string;
+  time: number;
+}
+
+export interface ChatContext {
+  todayLabel?: string;
+  nextDay?: string;
+  lastSessionDay?: string;
+  lastSessionDate?: string;
+}
+
+export function localISODate(date = new Date()): string {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+export function getTodayInfo(date = new Date()): TodayInfo {
+  const weekday = date.toLocaleDateString("en-AU", { weekday: "long" });
+  const shortDate = date.toLocaleDateString("en-AU", { month: "short", day: "numeric" });
+  return {
+    iso: localISODate(date),
+    weekday,
+    shortDate,
+    label: `${weekday}, ${shortDate}`,
+  };
+}
+
+export function parseDateLabel(label: string, reference = new Date()): Date | null {
+  const isoMatch = label.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    const parsed = new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(`${label} ${reference.getFullYear()}`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  if (parsed.getTime() > reference.getTime()) parsed.setFullYear(parsed.getFullYear() - 1);
+  return parsed;
+}
+
+export function muscleFromGroup(group: string): string {
+  return group.split(" · ")[0] || group;
+}
+
+export function nextRotationDay(afterDay: string): string {
+  const idx = ROT.findIndex((day) => day.toLowerCase() === afterDay.toLowerCase());
+  return ROT[(idx + 1 + ROT.length) % ROT.length] ?? ROT[0];
+}
+
+export function findLatestSession(
+  data: Record<string, ExerciseData> = EX,
+  reference = new Date()
+): LastSessionInfo | null {
+  let latest: LastSessionInfo | null = null;
+
+  for (const [exercise, exerciseData] of Object.entries(data)) {
+    for (const set of exerciseData.hist) {
+      const parsed = parseDateLabel(set.date, reference);
+      if (!parsed) continue;
+      const time = parsed.getTime();
+      if (!latest || time > latest.time) {
+        latest = {
+          day: muscleFromGroup(exerciseData.group),
+          date: set.date,
+          exercise,
+          time,
+        };
+      }
+    }
+  }
+
+  return latest;
+}
+
 export interface ReadOut {
   hist: SetRow[];
   e1rm: number;
@@ -274,18 +358,25 @@ export function loadSummary(s: { w: number; sets: number; reps: number; rpe?: nu
 
 // Canned fallback replies for the chat, keyed by intent — used when no
 // GEMINI_API_KEY is configured. See src/lib/coach.ts for the real path.
-export function fallbackReply(text: string): string {
+export function fallbackReply(text: string, context: ChatContext = {}): string {
   const t = text.toLowerCase();
-  if (/today|what's on|whats on|plan/.test(t))
-    return "Chest, next in the rotation after Monday's legs. Bench 5×5, incline DB 3×10, cable fly 3×12, dips 3×8. Bench was 82.5 at RPE 9 last time.";
+  if (/today|what's on|whats on|plan/.test(t)) {
+    const next = context.nextDay ?? "Chest";
+    const last =
+      context.lastSessionDay && context.lastSessionDate
+        ? ` after ${context.lastSessionDay.toLowerCase()} on ${context.lastSessionDate}`
+        : "";
+    const today = context.todayLabel ? ` Today is ${context.todayLabel}.` : "";
+    return `${next} is next in the rotation${last}.${today} Bench 5x5, incline DB 3x10, cable fly 3x12, dips 3x8.`;
+  }
   if (/deload|stall|grind/.test(t)) return COACH["Bench Press"];
   if (/rpe/.test(t))
-    return "Reps left in the tank. 10 is failure, 9 is one left, 8 is two. Log it when you want a sharper trend, skip it when you are moving fast — the trend falls back to est-1RM and volume.";
+    return "Reps left in the tank. 10 is failure, 9 is one left, 8 is two. Log it when you want a sharper trend, skip it when you are moving fast - the trend falls back to est-1RM and volume.";
   if (/squat/.test(t)) return COACH["Back Squat"];
   if (/row|back/.test(t)) return COACH["Barbell Row"];
   if (/ohp|overhead|shoulder/.test(t)) return COACH["Overhead Press"];
   if (/bench|chest/.test(t)) return COACH["Bench Press"];
   if (/progress|how am i|read/.test(t))
-    return "Two moving, one grinding, one stuck. Row +14% and squat +9.5% at flat RPE. Bench is up 6.5% but RPE climbed 8 → 9 — deload it. Overhead press has not moved in five weeks.";
+    return "Two moving, one grinding, one stuck. Row +14% and squat +9.5% at flat RPE. Bench is up 6.5% but RPE climbed 8 to 9 - deload it. Overhead press has not moved in five weeks.";
   return "I only judge what is in the log. Ask me about an exercise by name, or what is on today.";
 }

@@ -7,7 +7,7 @@
 // RLS scopes every table to auth.uid(), and user_id defaults to auth.uid(),
 // so inserts never need to set it explicitly.
 
-import { EX, ROT, type ExerciseData, type SetRow, type ParsedSet } from "@/lib/gymlog";
+import { EX, ROT, localISODate, muscleFromGroup, type ExerciseData, type SetRow, type ParsedSet } from "@/lib/gymlog";
 import { getSupabaseClient } from "@/lib/supabase";
 
 interface ExerciseRow {
@@ -92,7 +92,7 @@ export async function seedIfEmpty(): Promise<void> {
     .insert(
       dates.map((date) => {
         const first = byDate.get(date)![0];
-        const muscle = EX[first.exercise].group.split(" · ")[0];
+        const muscle = muscleFromGroup(EX[first.exercise].group);
         return { date, day_label: muscle };
       })
     )
@@ -195,7 +195,7 @@ export async function loadHistory(): Promise<Record<string, ExerciseData>> {
 /** Writes a confirmed parse, reusing today's session if there already is one. */
 export async function saveSet(parsed: ParsedSet): Promise<void> {
   const supabase = getSupabaseClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localISODate();
 
   const { data: exercise, error: exError } = await supabase
     .from("exercises")

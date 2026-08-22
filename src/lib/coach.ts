@@ -6,7 +6,7 @@
 // ("How the AI actually works") for the rule this enforces.
 
 import "server-only";
-import { COACH, fallbackReply, readOut, round1, PROGRESS_EXERCISES } from "@/lib/gymlog";
+import { COACH, fallbackReply, readOut, round1, PROGRESS_EXERCISES, type ChatContext } from "@/lib/gymlog";
 
 const SYSTEM_PROMPT = `You are the coach voice for Gym Log, a personal workout tracker.
 Voice: direct, evidence-first, no hedging, no praise, no fluff. A read is three moves:
@@ -74,18 +74,30 @@ Computed numbers (do not alter, do not invent others):
 Write the coach's read of this exercise.`;
 }
 
-export async function judgeChat(message: string): Promise<string> {
-  const gemini = await callGemini({ prompt: buildChatPrompt(message) });
-  return gemini ?? fallbackReply(message);
+export async function judgeChat(message: string, context: ChatContext = {}): Promise<string> {
+  const gemini = await callGemini({ prompt: buildChatPrompt(message, context) });
+  return gemini ?? fallbackReply(message, context);
 }
 
-function buildChatPrompt(message: string): string {
+function buildChatPrompt(message: string, context: ChatContext): string {
   const numbers = PROGRESS_EXERCISES.map((name) => {
     const ro = readOut(name);
     return `${name}: est 1RM ${round1(ro.e1rm)} kg, ${ro.pct >= 0 ? "+" : ""}${round1(ro.pct)}%, status ${ro.status}`;
   }).join("\n");
+  const todayFacts = [
+    context.todayLabel ? `Today: ${context.todayLabel}` : null,
+    context.nextDay ? `Next training day: ${context.nextDay}` : null,
+    context.lastSessionDay && context.lastSessionDate
+      ? `Last completed session: ${context.lastSessionDay} on ${context.lastSessionDate}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   return `The lifter asks: "${message}"
+
+Current date and rotation facts:
+${todayFacts || "No current date facts were provided."}
 
 Computed numbers available to you (do not invent others):
 ${numbers}
