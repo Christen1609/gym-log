@@ -11,16 +11,21 @@ import {
   TRACKS,
   Units,
   epley,
+  findLatestSession,
+  getTodayInfo,
   loadSummary,
+  nextRotationDay,
   parseLog,
   readOut,
   round1,
   toDisplayWeight,
   type ExerciseData,
+  type TodayInfo,
 } from "@/lib/gymlog";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, getSupabaseClient } from "@/lib/supabase";
 import { loadHistory, saveSet, seedIfEmpty } from "@/lib/db";
+import { useSpotify } from "@/lib/spotify";
 
 export type Screen = "today" | "chat" | "exercise" | "progress" | "spotify" | "import" | "settings";
 export type Sheet = "menu" | "parse" | null;
@@ -68,6 +73,7 @@ const DEFAULT_UNITS: Units = "kg";
 const DEFAULT_VOICE: Voice = "direct";
 const DEFAULT_RPE_ASK: OnOff = "on";
 const DEFAULT_NEXT_DAY = "Chest";
+const DEFAULT_TODAY: TodayInfo = { iso: "", weekday: "Today", shortDate: "", label: "Today" };
 
 export function useGymLog() {
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
@@ -96,6 +102,7 @@ export function useGymLog() {
 
   const [playing, setPlaying] = useState(true);
   const [track, setTrack] = useState(0);
+  const spotify = useSpotify(screen === "spotify");
 
   const [imp, setImp] = useState(0);
   const importTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -104,6 +111,7 @@ export function useGymLog() {
   const [voice, setVoice] = useState<Voice>(DEFAULT_VOICE);
   const [rpeAsk, setRpeAsk] = useState<OnOff>(DEFAULT_RPE_ASK);
   const [nextDay, setNextDay] = useState(DEFAULT_NEXT_DAY);
+  const [todayInfo, setTodayInfo] = useState<TodayInfo>(DEFAULT_TODAY);
   const [hydrated, setHydrated] = useState(false);
 
   // When Supabase is configured the app is account-backed: `authed` gates the
@@ -199,6 +207,22 @@ export function useGymLog() {
     }
   }, [hydrated, logged, units, voice, rpeAsk, nextDay, theme]);
 
+  useEffect(() => {
+    const refreshToday = () => setTodayInfo(getTodayInfo());
+    refreshToday();
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshToday();
+    };
+
+    window.addEventListener("focus", refreshToday);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("focus", refreshToday);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, []);
+
   useEffect(
     () => () => {
       clearTimeout(thinkTimeout.current);
@@ -251,7 +275,20 @@ export function useGymLog() {
         const res = await fetch("/api/coach", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "chat", message: text }),
+          body: JSON.stringify({
+            type: "chat",
+            message: text,
+            context: (() => {
+              const now = new Date();
+              const latest = findLatestSession(history, now);
+              return {
+                todayLabel: getTodayInfo(now).label,
+                nextDay,
+                lastSessionDay: latest?.day,
+                lastSessionDate: latest?.date,
+              };
+            })(),
+          }),
         });
         const data = res.ok ? await res.json() : null;
         replyText = data?.text ?? "I only judge what is in the log. Ask me about an exercise by name, or what is on today.";
@@ -262,7 +299,7 @@ export function useGymLog() {
       setMsgs((m) => m.concat(reply));
       setTyping(false);
     }, 2400);
-  }, []);
+  }, [history, nextDay]);
 
   // Takes plain text rather than an input ref — the DOM ref that owns the
   // input value belongs to whichever screen renders it (see TodayScreen /
@@ -343,8 +380,15 @@ export function useGymLog() {
   // without Supabase, the user's own rows once signed in.
   const ro = readOut(activeEx, history);
   const cv = useCallback((w: number) => toDisplayWeight(w, units), [units]);
+  const todayReference = todayInfo.iso ? new Date(`${todayInfo.iso}T12:00:00`) : new Date();
+  const latestSession = findLatestSession(history, todayReference);
+  const inferredNextDay = latestSession ? nextRotationDay(latestSession.day) : DEFAULT_NEXT_DAY;
+  const currentNextDay = nextDay || inferredNextDay;
+  const lastSessionText = latestSession
+    ? `last ${latestSession.day.toLowerCase()} session ${latestSession.date}`
+    : "no sessions logged yet";
 
-  const rotation = ROT.map((d) => ({ name: d, active: d === nextDay, setNext: () => setNextDay(d) }));
+  const rotation = ROT.map((d) => ({ name: d, active: d === currentNextDay, setNext: () => setNextDay(d) }));
 
   const todayPlan = PLAN.filter((name) => history[name]?.hist.length).map((name) => {
     const hist = history[name].hist;
@@ -388,9 +432,10 @@ export function useGymLog() {
     setVoice,
     rpeAsk,
     setRpeAsk,
-    nextDay,
+    nextDay: currentNextDay,
     rotation,
-    dayTitle: `${nextDay} day`,
+    dayTitle: `${currentNextDay} day`,
+    currentDaySub: `${todayInfo.label} - ${lastSessionText}`,
     daySub: `Next after Wednesday's legs · last ${nextDay.toLowerCase()} session Jul 31`,
     todayPlan,
     logged,
@@ -416,6 +461,7 @@ export function useGymLog() {
     togglePlay,
     nextTrack,
     prevTrack,
+    spotify,
     imp,
     importNext,
     importReset,

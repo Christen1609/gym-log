@@ -1,23 +1,27 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/IconSprite";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import type { GymLogState } from "@/lib/useGymLog";
 
+const SUGGESTIONS = ["What's today?", "Am I stalling?", "What is RPE?", "Log a set, or ask the coach…"];
+
 export function TodayScreen({ state }: { state: GymLogState }) {
   const draftRef = useRef<HTMLInputElement>(null);
+  const [empty, setEmpty] = useState(true);
+  const [sugI, setSugI] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setSugI((i) => (i + 1) % SUGGESTIONS.length), 2600);
+    return () => clearInterval(id);
+  }, []);
 
   const send = () => {
     const el = draftRef.current;
     if (!el) return;
     state.submitText(el.value);
     el.value = "";
+    setEmpty(true);
   };
-
-  const chips = [
-    { label: "What's today?", go: () => state.say("What's today?") },
-    { label: "Am I stalling?", go: () => state.say("Am I stalling on bench?") },
-    { label: "What is RPE?", go: () => state.say("What is RPE again?") },
-  ];
 
   return (
     <div className="screen" style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
@@ -58,7 +62,7 @@ export function TodayScreen({ state }: { state: GymLogState }) {
         </div>
 
         <h1 style={{ fontSize: 40, margin: "0 0 6px", letterSpacing: "-.02em" }}>{state.dayTitle}</h1>
-        <p style={{ margin: "0 0 20px", fontSize: 13.5, opacity: 0.6 }}>{state.daySub}</p>
+        <p style={{ margin: "0 0 20px", fontSize: 13.5, opacity: 0.6 }}>{state.currentDaySub}</p>
 
         {state.logged.length > 0 && (
           <div style={{ marginBottom: 18 }}>
@@ -117,28 +121,29 @@ export function TodayScreen({ state }: { state: GymLogState }) {
         </div>
       </div>
 
-      <div style={{ flex: "none", padding: "8px 18px 30px", borderTop: "1px solid var(--color-divider)" }}>
-        <div className="xscroll" style={{ display: "flex", gap: 7, padding: "2px 0 10px" }}>
-          {chips.map((c) => (
-            <button key={c.label} className="pill" onClick={c.go}>
-              {c.label}
-            </button>
-          ))}
-        </div>
+      <div style={{ flex: "none", padding: "10px 18px 30px" }}>
         <div style={{ display: "flex", gap: 9, alignItems: "center" }}>
-          <input
-            className="input"
-            name="draft"
-            ref={draftRef}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                send();
-              }
-            }}
-            placeholder="Log a set, or ask the coach…"
-            style={{ flex: 1, minHeight: 46, fontSize: 14.5 }}
-          />
+          <div style={{ position: "relative", flex: 1 }}>
+            <input
+              className="input"
+              name="draft"
+              ref={draftRef}
+              aria-label="Log a set, or ask the coach"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              onChange={(e) => setEmpty(e.currentTarget.value === "")}
+              style={{ width: "100%", minHeight: 46, fontSize: 14.5 }}
+            />
+            {empty && (
+              <span className="ph-rotate" aria-hidden="true">
+                <span key={sugI}>{SUGGESTIONS[sugI]}</span>
+              </span>
+            )}
+          </div>
           <button
             className="btn btn-primary btn-icon"
             onClick={send}

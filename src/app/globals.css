@@ -242,6 +242,25 @@ textarea.input {
   resize: vertical;
 }
 
+/* Rotating suggestion inside the empty prompt box — styled like ::placeholder,
+   sits over the input so typed text simply covers it. */
+.ph-rotate {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 14.5px;
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+.ph-rotate > span {
+  display: inline-block;
+  animation: wordin 0.42s cubic-bezier(0.2, 1, 0.3, 1);
+}
+
 .seg2 {
   display: flex;
   gap: 3px;
