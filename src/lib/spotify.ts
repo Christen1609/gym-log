@@ -97,7 +97,15 @@ export async function completeSpotifyAuthIfCallback(): Promise<boolean> {
   if (!CLIENT_ID) return false;
   const url = new URL(window.location.href);
   const code = url.searchParams.get("code");
+  const denied = url.searchParams.get("error");
   const verifier = window.localStorage.getItem(VERIFIER_KEY);
+  if (denied) {
+    url.searchParams.delete("error");
+    url.searchParams.delete("state");
+    window.history.replaceState({}, "", url.pathname + (url.search || ""));
+    window.localStorage.removeItem(VERIFIER_KEY);
+    throw new Error(`Spotify refused the connection: ${denied}.`);
+  }
   if (!code || !verifier) return false;
 
   url.searchParams.delete("code");
