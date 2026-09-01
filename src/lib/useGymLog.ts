@@ -23,7 +23,17 @@ import {
 } from "@/lib/gymlog";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, getSupabaseClient } from "@/lib/supabase";
-import { loadHistory, saveSet, seedIfEmpty } from "@/lib/db";
+import { importHistory, loadHistory, saveSet, seedIfEmpty } from "@/lib/db";
+import {
+  fetchNotionPages,
+  importNotionPage,
+  loadNotionToken,
+  parsePastedLog,
+  saveNotionToken,
+  summarize,
+  type NotionPageRef,
+  type ParsedImport,
+} from "@/lib/notionImport";
 
 export type Screen = "today" | "chat" | "exercise" | "progress" | "import" | "settings";
 export type Sheet = "menu" | "parse" | null;
@@ -99,8 +109,14 @@ export function useGymLog() {
   const thinkInterval = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
 
+  // Import flow: 0 connect/pick a source, 1 reading, 2 confirm, 3 done.
   const [imp, setImp] = useState(0);
-  const importTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [notionToken, setNotionToken] = useState("");
+  const [notionPages, setNotionPages] = useState<NotionPageRef[] | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importParsed, setImportParsed] = useState<ParsedImport | null>(null);
+  const [importSaved, setImportSaved] = useState<{ sessions: number; sets: number; skipped: number } | null>(null);
 
   const [units, setUnits] = useState<Units>(DEFAULT_UNITS);
   const [voice, setVoice] = useState<Voice>(DEFAULT_VOICE);
@@ -155,6 +171,7 @@ export function useGymLog() {
     if (p.voice) setVoice(p.voice);
     if (p.rpeAsk) setRpeAsk(p.rpeAsk);
     if (p.nextDay) setNextDay(p.nextDay);
+    setNotionToken(loadNotionToken());
     setHydrated(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -222,7 +239,6 @@ export function useGymLog() {
     () => () => {
       clearTimeout(thinkTimeout.current);
       clearInterval(thinkInterval.current);
-      clearTimeout(importTimeout.current);
     },
     []
   );
@@ -346,18 +362,94 @@ export function useGymLog() {
     }
   }, [parsed, units, authed]);
 
-  const importNext = useCallback(() => {
-    setImp((cur) => {
-      if (cur === 0) {
-        clearTimeout(importTimeout.current);
-        importTimeout.current = setTimeout(() => setImp(2), 1600);
-        return 1;
-      }
-      if (cur === 2) return 3;
-      return cur;
-    });
+  const notionConnect = useCallback(async (token: string) => {
+    const trimmed = token.trim();
+    if (!trimmed) return;
+    setImportBusy(true);
+    setImportError(null);
+    try {
+      const pages = await fetchNotionPages(trimmed);
+      setNotionToken(trimmed);
+      saveNotionToken(trimmed);
+      setNotionPages(pages);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Couldn't reach Notion.");
+    } finally {
+      setImportBusy(false);
+    }
   }, []);
-  const importReset = useCallback(() => setImp(0), []);
+
+  // Re-lists pages with the token already on this device (e.g. after reopening
+  // the screen, when the page list from the original connect is gone).
+  const notionListPages = useCallback(() => void notionConnect(notionToken), [notionConnect, notionToken]);
+
+  const notionDisconnect = useCallback(() => {
+    setNotionToken("");
+    saveNotionToken("");
+    setNotionPages(null);
+    setImportError(null);
+  }, []);
+
+  const runImport = useCallback((job: Promise<ParsedImport>) => {
+    setImp(1);
+    setImportError(null);
+    void job
+      .then((parsed) => {
+        if (!parsed.sessions.length) {
+          setImportError("No dated sessions were found in that log.");
+          setImp(0);
+          return;
+        }
+        setImportParsed(parsed);
+        setImp(2);
+      })
+      .catch((err) => {
+        setImportError(err instanceof Error ? err.message : "Couldn't read that log.");
+        setImp(0);
+      });
+  }, []);
+
+  const importFromPage = useCallback(
+    (pageId: string) => runImport(importNotionPage(notionToken, pageId)),
+    [notionToken, runImport]
+  );
+
+  const importFromText = useCallback(
+    (text: string) => {
+      if (text.trim()) runImport(parsePastedLog(text));
+    },
+    [runImport]
+  );
+
+  const importConfirm = useCallback(() => {
+    if (!importParsed || importBusy) return;
+    if (!isSupabaseConfigured || !authed) {
+      setImportError("Sign in first — the import saves to your account.");
+      return;
+    }
+    setImportBusy(true);
+    setImportError(null);
+    void (async () => {
+      try {
+        const saved = await importHistory(importParsed.sessions, importParsed.exercises);
+        setImportSaved(saved);
+        setHistory(await loadHistory());
+        setImp(3);
+      } catch (err) {
+        console.error("Import save failed", err);
+        setImportError("Couldn't save the import. Try again.");
+      } finally {
+        setImportBusy(false);
+      }
+    })();
+  }, [importParsed, importBusy, authed]);
+
+  const importReset = useCallback(() => {
+    setImp(0);
+    setImportParsed(null);
+    setImportSaved(null);
+    setImportError(null);
+  }, []);
 
   // ── derived data ──────────────────────────────────────────────────────
 
@@ -442,8 +534,20 @@ export function useGymLog() {
     openExercise,
     progressCards,
     imp,
-    importNext,
     importReset,
+    notionConnected: Boolean(notionToken),
+    notionPages,
+    importBusy,
+    importError,
+    importSummary: importParsed ? summarize(importParsed) : null,
+    importFlags: importParsed?.flags ?? [],
+    importSaved,
+    notionConnect,
+    notionListPages,
+    notionDisconnect,
+    importFromPage,
+    importFromText,
+    importConfirm,
     raw,
     parsed,
     confirmSave,

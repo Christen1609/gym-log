@@ -192,6 +192,92 @@ export async function loadHistory(): Promise<Record<string, ExerciseData>> {
   return result;
 }
 
+export interface HistoryImportSet {
+  exercise: string;
+  weight: number;
+  reps: number;
+  count: number;
+  rpe: number | null;
+  note: string | null;
+}
+
+export interface HistoryImportSession {
+  date: string;
+  day_label: string;
+  sets: HistoryImportSet[];
+}
+
+export interface HistoryImportExercise {
+  name: string;
+  muscle_group: string | null;
+  is_compound: boolean;
+}
+
+/**
+ * Bulk-saves a parsed import. Re-runnable: dates that already have a session
+ * are skipped whole, and exercises are matched by name before being created.
+ */
+export async function importHistory(
+  sessions: HistoryImportSession[],
+  exercises: HistoryImportExercise[]
+): Promise<{ sessions: number; sets: number; skipped: number }> {
+  const supabase = getSupabaseClient();
+
+  const { data: existingEx, error: exError } = await supabase.from("exercises").select("id, name");
+  if (exError) throw exError;
+  const idByName = new Map<string, string>();
+  for (const row of existingEx ?? []) idByName.set((row.name as string).toLowerCase(), row.id as string);
+
+  const missing = exercises.filter((e) => !idByName.has(e.name.toLowerCase()));
+  if (missing.length) {
+    const { data: created, error: createError } = await supabase
+      .from("exercises")
+      .insert(missing.map((e) => ({ name: e.name, muscle_group: e.muscle_group, is_compound: e.is_compound })))
+      .select("id, name");
+    if (createError) throw createError;
+    for (const row of created ?? []) idByName.set((row.name as string).toLowerCase(), row.id as string);
+  }
+
+  const { data: existingSessions, error: sessError } = await supabase.from("sessions").select("date");
+  if (sessError) throw sessError;
+  const takenDates = new Set((existingSessions ?? []).map((s: { date: string }) => s.date));
+
+  const fresh = sessions.filter((s) => !takenDates.has(s.date) && s.sets.some((set) => idByName.has(set.exercise.toLowerCase())));
+  const skipped = sessions.length - fresh.length;
+  if (!fresh.length) return { sessions: 0, sets: 0, skipped };
+
+  const { data: createdSessions, error: insError } = await supabase
+    .from("sessions")
+    .insert(fresh.map((s) => ({ date: s.date, day_label: s.day_label })))
+    .select("id, date");
+  if (insError) throw insError;
+  const sessionIdByDate = new Map<string, string>();
+  for (const row of createdSessions ?? []) sessionIdByDate.set(row.date as string, row.id as string);
+
+  const setRows: Record<string, unknown>[] = [];
+  for (const s of fresh) {
+    for (const set of s.sets) {
+      const exerciseId = idByName.get(set.exercise.toLowerCase());
+      if (!exerciseId) continue;
+      for (let n = 1; n <= set.count; n++) {
+        setRows.push({
+          session_id: sessionIdByDate.get(s.date),
+          exercise_id: exerciseId,
+          set_no: n,
+          weight: set.weight,
+          reps: set.reps,
+          rpe: set.rpe,
+          felt_note: n === set.count ? set.note : null,
+        });
+      }
+    }
+  }
+  const { error: setsError } = await supabase.from("sets").insert(setRows);
+  if (setsError) throw setsError;
+
+  return { sessions: fresh.length, sets: setRows.length, skipped };
+}
+
 /** Writes a confirmed parse, reusing today's session if there already is one. */
 export async function saveSet(parsed: ParsedSet): Promise<void> {
   const supabase = getSupabaseClient();
