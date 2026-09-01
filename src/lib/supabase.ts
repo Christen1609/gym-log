@@ -19,6 +19,7 @@ export function getSupabaseClient() {
       "Supabase isn't configured — set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local."
     );
   }
-  client ??= createBrowserClient(url, anonKey);
+  // Data lives in the "gymlog" schema of a shared Supabase project, not public.
+  client ??= createBrowserClient(url, anonKey, { db: { schema: "gymlog" } });
   return client;
 }
