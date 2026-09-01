@@ -25,15 +25,27 @@ import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, getSupabaseClient } from "@/lib/supabase";
 import { importHistory, loadHistory, saveSet, seedIfEmpty } from "@/lib/db";
 import {
+  deleteOauthConnection,
   fetchNotionPages,
+  fetchOauthConnection,
   importNotionPage,
   loadNotionToken,
   parsePastedLog,
   saveNotionToken,
   summarize,
+  type NotionConnection,
   type NotionPageRef,
   type ParsedImport,
 } from "@/lib/notionImport";
+
+const OAUTH_ERRORS: Record<string, string> = {
+  config: "Notion OAuth isn't configured yet — use a token below.",
+  signin: "Sign in first, then connect Notion.",
+  denied: "Notion access was declined.",
+  state: "The Notion connection attempt expired — try again.",
+  exchange: "Notion didn't accept the connection. Try again.",
+  save: "Connected to Notion but couldn't save the connection. Try again.",
+};
 
 export type Screen = "today" | "chat" | "exercise" | "progress" | "import" | "settings";
 export type Sheet = "menu" | "parse" | null;
@@ -111,8 +123,10 @@ export function useGymLog() {
 
   // Import flow: 0 connect/pick a source, 1 reading, 2 confirm, 3 done.
   const [imp, setImp] = useState(0);
-  const [notionToken, setNotionToken] = useState("");
+  const [notionConn, setNotionConn] = useState<NotionConnection | null>(null);
   const [notionPages, setNotionPages] = useState<NotionPageRef[] | null>(null);
+  // Set when the OAuth callback bounced us back — triggers one auto page-list.
+  const oauthReturnRef = useRef(false);
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importParsed, setImportParsed] = useState<ParsedImport | null>(null);
@@ -171,7 +185,8 @@ export function useGymLog() {
     if (p.voice) setVoice(p.voice);
     if (p.rpeAsk) setRpeAsk(p.rpeAsk);
     if (p.nextDay) setNextDay(p.nextDay);
-    setNotionToken(loadNotionToken());
+    const manualToken = loadNotionToken();
+    if (manualToken) setNotionConn({ token: manualToken, workspace: null, source: "token" });
     setHydrated(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -189,6 +204,11 @@ export function useGymLog() {
         return;
       }
       setSyncing(true);
+      // An OAuth Notion connection lives on the account; it wins over any
+      // manually pasted token on this device.
+      void fetchOauthConnection().then((conn) => {
+        if (conn) setNotionConn(conn);
+      });
       try {
         await seedIfEmpty();
         setHistory(await loadHistory());
@@ -362,33 +382,68 @@ export function useGymLog() {
     }
   }, [parsed, units, authed]);
 
-  const notionConnect = useCallback(async (token: string) => {
-    const trimmed = token.trim();
-    if (!trimmed) return;
+  const listPagesWith = useCallback(async (token: string): Promise<boolean> => {
     setImportBusy(true);
     setImportError(null);
     try {
-      const pages = await fetchNotionPages(trimmed);
-      setNotionToken(trimmed);
-      saveNotionToken(trimmed);
-      setNotionPages(pages);
+      setNotionPages(await fetchNotionPages(token));
+      return true;
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "Couldn't reach Notion.");
+      return false;
     } finally {
       setImportBusy(false);
     }
   }, []);
 
-  // Re-lists pages with the token already on this device (e.g. after reopening
+  // Manual path: a pasted internal-integration token, kept on this device.
+  const notionConnect = useCallback(
+    async (token: string) => {
+      const trimmed = token.trim();
+      if (!trimmed) return;
+      if (await listPagesWith(trimmed)) {
+        setNotionConn({ token: trimmed, workspace: null, source: "token" });
+        saveNotionToken(trimmed);
+      }
+    },
+    [listPagesWith]
+  );
+
+  // Re-lists pages with the connection already at hand (e.g. after reopening
   // the screen, when the page list from the original connect is gone).
-  const notionListPages = useCallback(() => void notionConnect(notionToken), [notionConnect, notionToken]);
+  const notionListPages = useCallback(() => {
+    if (notionConn) void listPagesWith(notionConn.token);
+  }, [notionConn, listPagesWith]);
+
+  // Landed back from Notion's consent page: fetch the fresh connection row
+  // and list pages without another tap. Reading window.location is the same
+  // documented one-time external sync as the hydration effect above.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("notion");
+    if (!status) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    setScreen("import");
+    if (status === "connected") oauthReturnRef.current = true;
+    else setImportError(OAUTH_ERRORS[params.get("reason") ?? ""] ?? "Notion connection failed.");
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    if (oauthReturnRef.current && notionConn?.source === "oauth") {
+      oauthReturnRef.current = false;
+      void listPagesWith(notionConn.token);
+    }
+  }, [notionConn, listPagesWith]);
 
   const notionDisconnect = useCallback(() => {
-    setNotionToken("");
+    if (notionConn?.source === "oauth") void deleteOauthConnection();
+    setNotionConn(null);
     saveNotionToken("");
     setNotionPages(null);
     setImportError(null);
-  }, []);
+  }, [notionConn]);
 
   const runImport = useCallback((job: Promise<ParsedImport>) => {
     setImp(1);
@@ -410,8 +465,10 @@ export function useGymLog() {
   }, []);
 
   const importFromPage = useCallback(
-    (pageId: string) => runImport(importNotionPage(notionToken, pageId)),
-    [notionToken, runImport]
+    (pageId: string) => {
+      if (notionConn) runImport(importNotionPage(notionConn.token, pageId));
+    },
+    [notionConn, runImport]
   );
 
   const importFromText = useCallback(
@@ -535,7 +592,9 @@ export function useGymLog() {
     progressCards,
     imp,
     importReset,
-    notionConnected: Boolean(notionToken),
+    notionConnected: Boolean(notionConn),
+    notionWorkspace: notionConn?.workspace ?? null,
+    notionSource: notionConn?.source ?? null,
     notionPages,
     importBusy,
     importError,

@@ -4,7 +4,17 @@
 // calls to /api/notion, which proxies Notion and parses the log server-side.
 
 import { localISODate } from "@/lib/gymlog";
+import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 import type { HistoryImportExercise, HistoryImportSession } from "@/lib/db";
+
+/** True when the "Connect Notion" OAuth button should show at all. */
+export const notionOauthEnabled = Boolean(process.env.NEXT_PUBLIC_NOTION_CLIENT_ID);
+
+export interface NotionConnection {
+  token: string;
+  workspace: string | null;
+  source: "oauth" | "token";
+}
 
 export interface NotionPageRef {
   id: string;
@@ -35,6 +45,34 @@ export function saveNotionToken(token: string): void {
   } catch {
     /* storage unavailable — the session still works, it just won't remember */
   }
+}
+
+/** The signed-in user's OAuth connection row, if they've connected Notion. */
+export async function fetchOauthConnection(): Promise<NotionConnection | null> {
+  if (!isSupabaseConfigured) return null;
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("notion_connections")
+      .select("access_token, workspace_name")
+      .maybeSingle();
+    if (error || !data) return null;
+    return {
+      token: data.access_token as string,
+      workspace: (data.workspace_name as string | null) ?? null,
+      source: "oauth",
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteOauthConnection(): Promise<void> {
+  if (!isSupabaseConfigured) return;
+  const supabase = getSupabaseClient();
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) return;
+  await supabase.from("notion_connections").delete().eq("user_id", data.user.id);
 }
 
 async function call<T>(body: Record<string, unknown>): Promise<T> {

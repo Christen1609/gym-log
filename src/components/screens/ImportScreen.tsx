@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Icon } from "@/components/IconSprite";
+import { notionOauthEnabled } from "@/lib/notionImport";
 import type { GymLogState } from "@/lib/useGymLog";
 
 const STEP_LABEL = ["One-time import", "Reading…", "Step 2 of 2 · confirm", "Done"];
@@ -36,6 +37,21 @@ export function ImportScreen({ state }: { state: GymLogState }) {
 
             {!state.notionConnected ? (
               <>
+                {notionOauthEnabled && (
+                  <>
+                    <a className="btn btn-primary btn-block" href="/api/notion/login" style={{ minHeight: 48 }}>
+                      Connect Notion
+                    </a>
+                    <p style={{ margin: "10px 0 0", fontSize: 11.5, opacity: 0.5, textAlign: "center" }}>
+                      Notion asks you which pages to share. Pick your workout log.
+                    </p>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 12px", opacity: 0.4 }}>
+                      <span style={{ flex: 1, height: 1, background: "currentColor" }} />
+                      <span style={{ fontSize: 11.5 }}>or use a token</span>
+                      <span style={{ flex: 1, height: 1, background: "currentColor" }} />
+                    </div>
+                  </>
+                )}
                 <div className="field" style={{ marginBottom: 10 }}>
                   <label htmlFor="notionToken">Notion integration token</label>
                   <input
@@ -51,12 +67,12 @@ export function ImportScreen({ state }: { state: GymLogState }) {
                   />
                 </div>
                 <button
-                  className="btn btn-primary btn-block"
+                  className={`btn ${notionOauthEnabled ? "btn-secondary" : "btn-primary"} btn-block`}
                   onClick={() => void state.notionConnect(token)}
                   disabled={state.importBusy || !token.trim()}
-                  style={{ minHeight: 48 }}
+                  style={{ minHeight: notionOauthEnabled ? 44 : 48 }}
                 >
-                  {state.importBusy ? "Connecting…" : "Connect Notion"}
+                  {state.importBusy ? "Connecting…" : "Connect with token"}
                 </button>
                 <button
                   className="btn btn-secondary btn-block"
@@ -84,7 +100,7 @@ export function ImportScreen({ state }: { state: GymLogState }) {
             ) : (
               <div className="card" style={{ padding: 8, marginBottom: 14, gap: 2 }}>
                 <div className="micro" style={{ padding: "8px 8px 4px" }}>
-                  Pick your log
+                  {state.notionWorkspace ? `Pick your log · ${state.notionWorkspace}` : "Pick your log"}
                 </div>
                 {state.notionPages.length === 0 && (
                   <span style={{ fontSize: 13, opacity: 0.65, padding: "4px 8px 10px" }}>
