@@ -244,6 +244,61 @@ export function findLatestSession(
   return latest;
 }
 
+/** Whole calendar days from `from` to `to`, ignoring the time of day. */
+export function daysBetween(from: Date, to: Date): number {
+  const a = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime();
+  const b = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime();
+  return Math.round((b - a) / 86_400_000);
+}
+
+/** Snaps a stored muscle-group label onto the canonical rotation entry. */
+export function normalizeDay(day: string): string {
+  return ROT.find((d) => d.toLowerCase() === day.trim().toLowerCase()) ?? ROT[0];
+}
+
+export interface DayResolution {
+  /** The rotation day that is on today. */
+  day: string;
+  lastSession: LastSessionInfo | null;
+  /** Whole days since the last logged session; null when nothing is logged. */
+  daysSinceLast: number | null;
+  /** True when the last logged session is dated today. */
+  loggedToday: boolean;
+}
+
+/**
+ * Works out which rotation day today is with no input from the user: the
+ * calendar decides whether the last logged session is already done (today
+ * stays on that day) or is history (the rotation advances one).
+ */
+export function resolveDay(
+  data: Record<string, ExerciseData> = EX,
+  reference = new Date()
+): DayResolution {
+  const lastSession = findLatestSession(data, reference);
+  if (!lastSession) {
+    return { day: ROT[0], lastSession: null, daysSinceLast: null, loggedToday: false };
+  }
+
+  const daysSinceLast = daysBetween(new Date(lastSession.time), reference);
+  const loggedToday = daysSinceLast <= 0;
+  const day = loggedToday ? normalizeDay(lastSession.day) : nextRotationDay(lastSession.day);
+
+  return { day, lastSession, daysSinceLast, loggedToday };
+}
+
+/**
+ * The exercises that belong to a rotation day, taken from whatever history the
+ * user actually has. Empty when nothing has been logged against that day yet —
+ * the screen says so rather than showing another day's work.
+ */
+export function planForDay(day: string, data: Record<string, ExerciseData> = EX): string[] {
+  const target = normalizeDay(day).toLowerCase();
+  return Object.entries(data)
+    .filter(([, d]) => d.hist.length > 0 && muscleFromGroup(d.group).toLowerCase() === target)
+    .map(([name]) => name);
+}
+
 export interface ReadOut {
   hist: SetRow[];
   e1rm: number;
@@ -343,6 +398,84 @@ export function parseLog(text: string): ParsedSet | null {
     rpe: rpeMatch ? parseFloat(rpeMatch[1]) : null,
     note: noteMatch ? noteMatch[1].trim() : "",
   };
+}
+
+// ── history collapse ─────────────────────────────────────────────────────
+// Shared by the browser (db.ts) and the coach's server route, which query the
+// same tables and need the identical per-exercise shape the UI computes from.
+
+export interface HistoryExerciseRow {
+  id: string;
+  name: string;
+  muscle_group: string | null;
+  is_compound: boolean;
+}
+
+export interface HistorySetRow {
+  exercise_id: string;
+  session_id: string;
+  weight: number;
+  reps: number;
+  rpe: number | null;
+  felt_note: string | null;
+  date: string; // the session's ISO date
+}
+
+/** Short month-day label ("Jul 31") — the format the UI renders. */
+export function formatHistDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00Z");
+  return d.toLocaleDateString("en-GB", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+/** "Chest · compound" — rebuilt from the columns the schema actually stores. */
+export function historyGroupLabel(row: { muscle_group: string | null; is_compound: boolean }): string {
+  const kind = row.is_compound ? "compound" : "accessory";
+  return row.muscle_group ? `${row.muscle_group} · ${kind}` : kind;
+}
+
+/**
+ * Collapses raw set rows back into the per-exercise shape the UI computes
+ * from: one entry per exercise per session, carrying that session's top set
+ * and its set count.
+ */
+export function collapseHistory(exercises: HistoryExerciseRow[], sets: HistorySetRow[]): Record<string, ExerciseData> {
+  type Dated = SetRow & { _iso: string };
+  const byExercise = new Map<string, Map<string, Dated>>();
+
+  for (const row of sets) {
+    if (!byExercise.has(row.exercise_id)) byExercise.set(row.exercise_id, new Map());
+    const sessions = byExercise.get(row.exercise_id)!;
+    const existing = sessions.get(row.session_id);
+
+    if (!existing) {
+      sessions.set(row.session_id, {
+        date: formatHistDate(row.date),
+        w: Number(row.weight),
+        sets: 1,
+        reps: Number(row.reps),
+        rpe: row.rpe === null ? null : Number(row.rpe),
+        note: row.felt_note ?? "",
+        _iso: row.date,
+      });
+    } else {
+      existing.sets += 1;
+      // The heaviest set of a session is the one the UI reports as the load.
+      if (Number(row.weight) > existing.w) {
+        existing.w = Number(row.weight);
+        existing.reps = Number(row.reps);
+      }
+      if (row.rpe !== null) existing.rpe = Number(row.rpe);
+      if (row.felt_note) existing.note = row.felt_note;
+    }
+  }
+
+  const result: Record<string, ExerciseData> = {};
+  for (const ex of exercises) {
+    const sessions = byExercise.get(ex.id);
+    const hist = sessions ? [...sessions.values()].sort((a, b) => a._iso.localeCompare(b._iso)) : [];
+    result[ex.name] = { group: historyGroupLabel(ex), hist };
+  }
+  return result;
 }
 
 export function loadSummary(s: { w: number; sets: number; reps: number; rpe?: number | null }, units: Units) {

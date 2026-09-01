@@ -7,30 +7,19 @@
 // RLS scopes every table to auth.uid(), and user_id defaults to auth.uid(),
 // so inserts never need to set it explicitly.
 
-import { EX, ROT, localISODate, muscleFromGroup, type ExerciseData, type SetRow, type ParsedSet } from "@/lib/gymlog";
+import {
+  EX,
+  ROT,
+  collapseHistory,
+  localISODate,
+  muscleFromGroup,
+  type ExerciseData,
+  type HistoryExerciseRow,
+  type HistorySetRow,
+  type ParsedSet,
+  type SetRow,
+} from "@/lib/gymlog";
 import { getSupabaseClient } from "@/lib/supabase";
-
-interface ExerciseRow {
-  id: string;
-  name: string;
-  muscle_group: string | null;
-  is_compound: boolean;
-}
-
-/** A history entry plus the raw ISO date, kept only for sorting. */
-type DatedSetRow = SetRow & { _iso: string };
-
-/** Short month-day label ("Jul 31") — the format the UI renders. */
-function formatDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00Z");
-  return d.toLocaleDateString("en-GB", { month: "short", day: "numeric", timeZone: "UTC" });
-}
-
-/** "Chest · compound" — rebuilt from the columns the schema actually stores. */
-function groupLabel(row: ExerciseRow): string {
-  const kind = row.is_compound ? "compound" : "accessory";
-  return row.muscle_group ? `${row.muscle_group} · ${kind}` : kind;
-}
 
 /**
  * Seeds exercises, the rotation, and the demo session history — but only into
@@ -143,53 +132,58 @@ export async function loadHistory(): Promise<Record<string, ExerciseData>> {
     .order("set_no");
   if (setsError) throw setsError;
 
-  const byExercise = new Map<string, Map<string, DatedSetRow>>();
-  for (const raw of sets ?? []) {
-    const row = raw as unknown as {
-      exercise_id: string;
-      session_id: string;
-      weight: number;
-      reps: number;
-      rpe: number | null;
-      felt_note: string | null;
-      sessions: { date: string };
-    };
+  type JoinedRow = Omit<HistorySetRow, "date"> & { sessions: { date: string } };
+  return collapseHistory(
+    (exercises ?? []) as unknown as HistoryExerciseRow[],
+    ((sets ?? []) as unknown as JoinedRow[]).map((row) => ({ ...row, date: row.sessions.date }))
+  );
+}
 
-    if (!byExercise.has(row.exercise_id)) byExercise.set(row.exercise_id, new Map());
-    const sessions = byExercise.get(row.exercise_id)!;
-    const existing = sessions.get(row.session_id);
+// ── coach personalisation ────────────────────────────────────────────────
 
-    if (!existing) {
-      sessions.set(row.session_id, {
-        date: formatDate(row.sessions.date),
-        w: Number(row.weight),
-        sets: 1,
-        reps: Number(row.reps),
-        rpe: row.rpe === null ? null : Number(row.rpe),
-        note: row.felt_note ?? "",
-        _iso: row.sessions.date,
-      });
-    } else {
-      existing.sets += 1;
-      // The heaviest set of a session is the one the UI reports as the load.
-      if (Number(row.weight) > existing.w) {
-        existing.w = Number(row.weight);
-        existing.reps = Number(row.reps);
-      }
-      if (row.rpe !== null) existing.rpe = Number(row.rpe);
-      if (row.felt_note) existing.note = row.felt_note;
-    }
-  }
+export interface CoachProfile {
+  goal: string | null;
+  experience: string | null;
+  days_per_week: number | null;
+  injuries: string | null;
+  preferences: string | null;
+}
 
-  const result: Record<string, ExerciseData> = {};
-  for (const ex of (exercises ?? []) as unknown as ExerciseRow[]) {
-    const sessions = byExercise.get(ex.id);
-    const hist = sessions
-      ? [...sessions.values()].sort((a, b) => a._iso.localeCompare(b._iso))
-      : [];
-    result[ex.name] = { group: groupLabel(ex), hist };
-  }
-  return result;
+export async function loadProfile(): Promise<CoachProfile | null> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("goal, experience, days_per_week, injuries, preferences")
+    .maybeSingle();
+  if (error) throw error;
+  return (data as CoachProfile | null) ?? null;
+}
+
+export async function saveProfile(profile: CoachProfile): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) throw new Error("Not signed in");
+  const { error } = await supabase
+    .from("profiles")
+    .upsert({ user_id: auth.user.id, ...profile, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+  if (error) throw error;
+}
+
+export interface StoredChatMessage {
+  who: "user" | "coach";
+  text: string;
+}
+
+/** The recent conversation, oldest first, so the chat reopens where it left off. */
+export async function loadChatMessages(limit = 30): Promise<StoredChatMessage[]> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("coach_messages")
+    .select("who, text, created_at")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return ((data ?? []) as { who: "user" | "coach"; text: string }[]).map(({ who, text }) => ({ who, text })).reverse();
 }
 
 export interface HistoryImportSet {

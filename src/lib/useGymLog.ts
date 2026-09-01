@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   COACH,
   EX,
-  PLAN,
   PROGRESS_EXERCISES,
   ROT,
   THINKING,
@@ -13,9 +12,11 @@ import {
   findLatestSession,
   getTodayInfo,
   loadSummary,
-  nextRotationDay,
+  localISODate,
   parseLog,
+  planForDay,
   readOut,
+  resolveDay,
   round1,
   toDisplayWeight,
   type ExerciseData,
@@ -23,7 +24,16 @@ import {
 } from "@/lib/gymlog";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, getSupabaseClient } from "@/lib/supabase";
-import { importHistory, loadHistory, saveSet, seedIfEmpty } from "@/lib/db";
+import {
+  importHistory,
+  loadChatMessages,
+  loadHistory,
+  loadProfile,
+  saveProfile,
+  saveSet,
+  seedIfEmpty,
+  type CoachProfile,
+} from "@/lib/db";
 import {
   deleteOauthConnection,
   fetchNotionPages,
@@ -48,7 +58,7 @@ const OAUTH_ERRORS: Record<string, string> = {
 };
 
 export type Screen = "today" | "chat" | "exercise" | "progress" | "import" | "settings";
-export type Sheet = "menu" | "parse" | null;
+export type Sheet = "menu" | "parse" | "reminder" | null;
 export type Theme = "light" | "dark";
 export type Voice = "direct" | "detailed";
 export type OnOff = "on" | "off";
@@ -69,8 +79,16 @@ interface PersistedState {
   units: Units;
   voice: Voice;
   rpeAsk: OnOff;
-  nextDay: string;
   theme: Theme;
+  /** A day the user picked by hand, and the date they picked it on. The
+   *  override expires when the calendar rolls over, so the app goes back to
+   *  working the day out for itself the next morning. */
+  dayOverride: string | null;
+  dayOverrideOn: string;
+  /** ISO date the "log your last workout?" prompt was last answered. */
+  loggedPromptOn: string;
+  /** ISO date `logged` belongs to — cleared when a new day starts. */
+  loggedOn: string;
 }
 
 const STORAGE_KEY = "gymlog:v1";
@@ -92,7 +110,6 @@ const DEFAULT_THEME: Theme = "light";
 const DEFAULT_UNITS: Units = "kg";
 const DEFAULT_VOICE: Voice = "direct";
 const DEFAULT_RPE_ASK: OnOff = "on";
-const DEFAULT_NEXT_DAY = "Chest";
 const DEFAULT_TODAY: TodayInfo = { iso: "", weekday: "Today", shortDate: "", label: "Today" };
 
 export function useGymLog() {
@@ -135,9 +152,17 @@ export function useGymLog() {
   const [units, setUnits] = useState<Units>(DEFAULT_UNITS);
   const [voice, setVoice] = useState<Voice>(DEFAULT_VOICE);
   const [rpeAsk, setRpeAsk] = useState<OnOff>(DEFAULT_RPE_ASK);
-  const [nextDay, setNextDay] = useState(DEFAULT_NEXT_DAY);
+  // The day is worked out from the log, not stored. These two only record a
+  // manual override and the date it was made on — see `currentDay` below.
+  const [dayOverride, setDayOverride] = useState<string | null>(null);
+  const [dayOverrideOn, setDayOverrideOn] = useState("");
+  const [loggedOn, setLoggedOn] = useState("");
+  const [loggedPromptOn, setLoggedPromptOn] = useState("");
   const [todayInfo, setTodayInfo] = useState<TodayInfo>(DEFAULT_TODAY);
   const [hydrated, setHydrated] = useState(false);
+  // Guards the reminder so it opens at most once per mount, and never on top
+  // of a sheet the user opened themselves.
+  const remindedRef = useRef(false);
 
   // When Supabase is configured the app is account-backed: `authed` gates the
   // UI behind sign-in and `history` is the user's real data. Without it both
@@ -145,6 +170,7 @@ export function useGymLog() {
   const [authed, setAuthed] = useState<boolean | null>(isSupabaseConfigured ? null : true);
   const [history, setHistory] = useState<Record<string, ExerciseData>>(EX);
   const [syncing, setSyncing] = useState(false);
+  const [profile, setProfile] = useState<CoachProfile | null>(null);
 
   // Progressive enhancement: seed with the fallback copy immediately (so the
   // app matches the prototype offline with zero flicker), then let the real
@@ -184,7 +210,10 @@ export function useGymLog() {
     if (p.units) setUnits(p.units);
     if (p.voice) setVoice(p.voice);
     if (p.rpeAsk) setRpeAsk(p.rpeAsk);
-    if (p.nextDay) setNextDay(p.nextDay);
+    if (p.dayOverride) setDayOverride(p.dayOverride);
+    if (p.dayOverrideOn) setDayOverrideOn(p.dayOverrideOn);
+    if (p.loggedOn) setLoggedOn(p.loggedOn);
+    if (p.loggedPromptOn) setLoggedPromptOn(p.loggedPromptOn);
     const manualToken = loadNotionToken();
     if (manualToken) setNotionConn({ token: manualToken, workspace: null, source: "token" });
     setHydrated(true);
@@ -211,7 +240,40 @@ export function useGymLog() {
       });
       try {
         await seedIfEmpty();
-        setHistory(await loadHistory());
+        const h = await loadHistory();
+        setHistory(h);
+
+        // The coach's memory: reopen the saved conversation and profile.
+        const [stored, prof] = await Promise.all([loadChatMessages(), loadProfile()]);
+        if (stored.length) setMsgs(stored.map((m) => ({ id: msgIdRef.current++, who: m.who, text: m.text })));
+        setProfile(prof);
+
+        // Weekly check-in: the coach speaks first when a week has passed.
+        // Fire-and-forget so sign-in never waits on Gemini.
+        void (async () => {
+          try {
+            const now = new Date();
+            const latest = findLatestSession(h, now);
+            const res = await fetch("/api/coach", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                type: "checkin",
+                context: {
+                  todayLabel: getTodayInfo(now).label,
+                  lastSessionDay: latest?.day,
+                  lastSessionDate: latest?.date,
+                },
+              }),
+            });
+            const data = res.ok ? await res.json() : null;
+            if (data?.text) {
+              setMsgs((m) => m.concat({ id: msgIdRef.current++, who: "coach", text: data.text as string }));
+            }
+          } catch {
+            /* a missed check-in is not an error the user should see */
+          }
+        })();
       } catch (err) {
         // Leave the seeded history in place so the app stays usable.
         console.error("Supabase sync failed", err);
@@ -231,13 +293,23 @@ export function useGymLog() {
 
   useEffect(() => {
     if (!hydrated) return;
-    const data: PersistedState = { logged, units, voice, rpeAsk, nextDay, theme };
+    const data: PersistedState = {
+      logged,
+      units,
+      voice,
+      rpeAsk,
+      theme,
+      dayOverride,
+      dayOverrideOn,
+      loggedPromptOn,
+      loggedOn,
+    };
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch {
       /* storage unavailable — non-fatal */
     }
-  }, [hydrated, logged, units, voice, rpeAsk, nextDay, theme]);
+  }, [hydrated, logged, units, voice, rpeAsk, theme, dayOverride, dayOverrideOn, loggedPromptOn, loggedOn]);
 
   useEffect(() => {
     const refreshToday = () => setTodayInfo(getTodayInfo());
@@ -314,7 +386,7 @@ export function useGymLog() {
               const latest = findLatestSession(history, now);
               return {
                 todayLabel: getTodayInfo(now).label,
-                nextDay,
+                nextDay: resolveDay(history, now).day,
                 lastSessionDay: latest?.day,
                 lastSessionDate: latest?.date,
               };
@@ -330,7 +402,7 @@ export function useGymLog() {
       setMsgs((m) => m.concat(reply));
       setTyping(false);
     }, 2400);
-  }, [history, nextDay]);
+  }, [history]);
 
   // Takes plain text rather than an input ref — the DOM ref that owns the
   // input value belongs to whichever screen renders it (see TodayScreen /
@@ -366,6 +438,8 @@ export function useGymLog() {
     setSheet(null);
     setParsed(null);
     setScreen("today");
+    setLoggedOn(todayInfo.iso || localISODate());
+    setLoggedPromptOn(todayInfo.iso || localISODate());
 
     // Persist to Postgres and pull the history back so trends include this set.
     // The optimistic row above stays put if the write fails, so nothing the
@@ -380,7 +454,7 @@ export function useGymLog() {
         }
       })();
     }
-  }, [parsed, units, authed]);
+  }, [parsed, units, authed, todayInfo.iso]);
 
   const listPagesWith = useCallback(async (token: string): Promise<boolean> => {
     setImportBusy(true);
@@ -501,12 +575,44 @@ export function useGymLog() {
     })();
   }, [importParsed, importBusy, authed]);
 
+  const saveCoachProfile = useCallback((p: CoachProfile) => {
+    setProfile(p);
+    void saveProfile(p).catch((err) => console.error("Profile save failed", err));
+  }, []);
+
   const importReset = useCallback(() => {
     setImp(0);
     setImportParsed(null);
     setImportSaved(null);
     setImportError(null);
   }, []);
+
+  // Answering the prompt is remembered against today's date, so it asks once
+  // a day and not on every reopen of the app.
+  const answerLoggedPrompt = useCallback(() => {
+    setLoggedPromptOn(todayInfo.iso || localISODate());
+    setSheet(null);
+  }, [todayInfo.iso]);
+
+  // "Yes, it's logged" — nothing to record, just stop asking today.
+  const confirmLoggedPrompt = answerLoggedPrompt;
+
+  // "Not yet" — close and leave the composer ready on Today.
+  const dismissLoggedPrompt = useCallback(() => {
+    answerLoggedPrompt();
+    setScreen("today");
+  }, [answerLoggedPrompt]);
+
+  // A new calendar day: yesterday's "Logged today" strip is not today's.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!hydrated || !todayInfo.iso) return;
+    if (loggedOn && loggedOn !== todayInfo.iso) {
+      setLogged([]);
+      setLoggedOn(todayInfo.iso);
+    }
+  }, [hydrated, todayInfo.iso, loggedOn]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── derived data ──────────────────────────────────────────────────────
 
@@ -515,16 +621,38 @@ export function useGymLog() {
   const ro = readOut(activeEx, history);
   const cv = useCallback((w: number) => toDisplayWeight(w, units), [units]);
   const todayReference = todayInfo.iso ? new Date(`${todayInfo.iso}T12:00:00`) : new Date();
-  const latestSession = findLatestSession(history, todayReference);
-  const inferredNextDay = latestSession ? nextRotationDay(latestSession.day) : DEFAULT_NEXT_DAY;
-  const currentNextDay = nextDay || inferredNextDay;
+
+  // The whole point: the app reads the calendar and the log and decides for
+  // itself which day is on. `dayOverride` only wins for the day it was set.
+  const resolved = resolveDay(history, todayReference);
+  const latestSession = resolved.lastSession;
+  const overrideActive = Boolean(dayOverride) && dayOverrideOn === todayInfo.iso;
+  const currentNextDay = overrideActive ? (dayOverride as string) : resolved.day;
+
   const lastSessionText = latestSession
     ? `last ${latestSession.day.toLowerCase()} session ${latestSession.date}`
     : "no sessions logged yet";
 
-  const rotation = ROT.map((d) => ({ name: d, active: d === currentNextDay, setNext: () => setNextDay(d) }));
+  // A session is "missing" once a full day has gone by without one. That is
+  // what the prompt asks about, and it is derived, never stored.
+  const daysSinceLast = resolved.daysSinceLast;
+  const workoutUnlogged = daysSinceLast === null || daysSinceLast >= 1;
 
-  const todayPlan = PLAN.filter((name) => history[name]?.hist.length).map((name) => {
+  const pickDay = useCallback(
+    (d: string) => {
+      setDayOverride(d);
+      setDayOverrideOn(todayInfo.iso || localISODate());
+    },
+    [todayInfo.iso]
+  );
+
+  const rotation = ROT.map((d) => ({
+    name: d,
+    active: d === currentNextDay,
+    setNext: () => pickDay(d),
+  }));
+
+  const todayPlan = planForDay(currentNextDay, history).map((name) => {
     const hist = history[name].hist;
     const last = hist[hist.length - 1];
     return {
@@ -550,6 +678,22 @@ export function useGymLog() {
     };
   });
 
+  // The nudge. Opens at most once per calendar day, only on Today, and never
+  // over a sheet the user opened themselves. `syncing` gates it so it judges
+  // the account's real history rather than the seed it starts from.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (remindedRef.current) return;
+    if (!hydrated || !todayInfo.iso || syncing) return;
+    if (authed !== true) return;
+    if (!workoutUnlogged) return;
+    if (loggedPromptOn === todayInfo.iso) return;
+    if (sheet !== null || screen !== "today") return;
+    remindedRef.current = true;
+    setSheet("reminder");
+  }, [hydrated, todayInfo.iso, syncing, authed, workoutUnlogged, loggedPromptOn, sheet, screen]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   return {
     theme,
     toggleTheme: () => setTheme((t) => (t === "dark" ? "light" : "dark")),
@@ -569,8 +713,21 @@ export function useGymLog() {
     nextDay: currentNextDay,
     rotation,
     dayTitle: `${currentNextDay} day`,
+    dayIsAuto: !overrideActive,
+    clearDayOverride: () => {
+      setDayOverride(null);
+      setDayOverrideOn("");
+    },
+    lastSessionDay: latestSession?.day ?? null,
+    lastSessionDate: latestSession?.date ?? null,
+    daysSinceLast,
+    workoutUnlogged,
+    confirmLoggedPrompt,
+    dismissLoggedPrompt,
     currentDaySub: `${todayInfo.label} - ${lastSessionText}`,
-    daySub: `Next after Wednesday's legs · last ${nextDay.toLowerCase()} session Jul 31`,
+    daySub: latestSession
+      ? `After ${latestSession.day.toLowerCase()} on ${latestSession.date}`
+      : "No sessions logged yet",
     todayPlan,
     logged,
     submitText,
@@ -584,6 +741,8 @@ export function useGymLog() {
     readOutData: ro,
     authed,
     syncing,
+    profile,
+    saveCoachProfile,
     supabaseEnabled: isSupabaseConfigured,
     signOut: () => void getSupabaseClient().auth.signOut(),
     coachText: coachText[activeEx] ?? COACH[activeEx],

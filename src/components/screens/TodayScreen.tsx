@@ -55,14 +55,42 @@ export function TodayScreen({ state }: { state: GymLogState }) {
             Rotation
           </span>
           {state.rotation.map((d) => (
-            <span key={d.name} className="pill" data-active={d.active ? "true" : "false"}>
+            <button
+              key={d.name}
+              type="button"
+              className="pill"
+              data-active={d.active ? "true" : "false"}
+              aria-pressed={d.active}
+              onClick={d.setNext}
+            >
               {d.name}
-            </span>
+            </button>
           ))}
         </div>
 
         <h1 style={{ fontSize: 40, margin: "0 0 6px", letterSpacing: "-.02em" }}>{state.dayTitle}</h1>
-        <p style={{ margin: "0 0 20px", fontSize: 13.5, opacity: 0.6 }}>{state.currentDaySub}</p>
+        <p style={{ margin: "0 0 8px", fontSize: 13.5, opacity: 0.6 }}>{state.currentDaySub}</p>
+        {!state.dayIsAuto && (
+          <button
+            type="button"
+            onClick={state.clearDayOverride}
+            style={{
+              margin: "0 0 20px",
+              padding: 0,
+              border: 0,
+              background: "none",
+              font: "inherit",
+              fontSize: 12,
+              opacity: 0.55,
+              textDecoration: "underline",
+              cursor: "pointer",
+              color: "inherit",
+            }}
+          >
+            Picked by hand — back to the rotation
+          </button>
+        )}
+        {state.dayIsAuto && <div style={{ height: 12 }} />}
 
         {state.logged.length > 0 && (
           <div style={{ marginBottom: 18 }}>
@@ -96,6 +124,20 @@ export function TodayScreen({ state }: { state: GymLogState }) {
         <div className="micro" style={{ marginBottom: 8 }}>
           Planned · last time
         </div>
+        {state.todayPlan.length === 0 && (
+          <div
+            style={{
+              padding: "18px 16px",
+              borderRadius: 22,
+              background: "var(--color-surface)",
+              fontSize: 13.5,
+              opacity: 0.65,
+              lineHeight: 1.45,
+            }}
+          >
+            Nothing logged for {state.dayTitle.toLowerCase()} yet. Log a set below and it will show up here next time.
+          </div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {state.todayPlan.map((ex) => (
             <button

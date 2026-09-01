@@ -3,6 +3,7 @@
 import { IconSprite } from "@/components/IconSprite";
 import { MenuSheet } from "@/components/sheets/MenuSheet";
 import { ParseSheet } from "@/components/sheets/ParseSheet";
+import { ReminderSheet } from "@/components/sheets/ReminderSheet";
 import { ChatScreen } from "@/components/screens/ChatScreen";
 import { ExerciseScreen } from "@/components/screens/ExerciseScreen";
 import { ImportScreen } from "@/components/screens/ImportScreen";
@@ -34,6 +35,7 @@ export default function Home() {
 
       {state.sheet === "menu" && <MenuSheet state={state} />}
       {state.sheet === "parse" && <ParseSheet state={state} />}
+      {state.sheet === "reminder" && <ReminderSheet state={state} />}
     </div>
   );
 }

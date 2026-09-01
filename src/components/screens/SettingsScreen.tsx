@@ -1,6 +1,105 @@
+import { useState } from "react";
 import { Icon } from "@/components/IconSprite";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import type { CoachProfile } from "@/lib/db";
 import type { GymLogState } from "@/lib/useGymLog";
+
+const GOALS = ["Strength", "Muscle", "General fitness"];
+const EXPERIENCE = ["New", "Intermediate", "Advanced"];
+const DAYS = [2, 3, 4, 5, 6];
+
+/**
+ * What the coach knows about you. Mounted with a key that flips when the
+ * stored profile arrives, so the fields start from what's saved.
+ */
+function CoachProfileCard({ profile, onSave }: { profile: CoachProfile | null; onSave: (p: CoachProfile) => void }) {
+  const [goal, setGoal] = useState(profile?.goal ?? "");
+  const [experience, setExperience] = useState(profile?.experience ?? "");
+  const [days, setDays] = useState<number | null>(profile?.days_per_week ?? null);
+  const [injuries, setInjuries] = useState(profile?.injuries ?? "");
+  const [preferences, setPreferences] = useState(profile?.preferences ?? "");
+  const [saved, setSaved] = useState(false);
+
+  const touch = () => setSaved(false);
+
+  return (
+    <div className="card" style={{ padding: 16, marginBottom: 11, gap: 12 }}>
+      <div>
+        <div style={{ fontSize: 14.5, fontWeight: 600 }}>Your profile</div>
+        <div style={{ fontSize: 11.5, opacity: 0.55 }}>The coach reads this with every answer.</div>
+      </div>
+      <div>
+        <div className="micro" style={{ marginBottom: 6 }}>Goal</div>
+        <div className="xscroll" style={{ display: "flex", gap: 7 }}>
+          {GOALS.map((g) => (
+            <button key={g} className="pill" data-active={goal === g ? "true" : "false"} onClick={() => { setGoal(goal === g ? "" : g); touch(); }}>
+              {g}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="micro" style={{ marginBottom: 6 }}>Experience</div>
+        <div className="xscroll" style={{ display: "flex", gap: 7 }}>
+          {EXPERIENCE.map((e) => (
+            <button key={e} className="pill" data-active={experience === e ? "true" : "false"} onClick={() => { setExperience(experience === e ? "" : e); touch(); }}>
+              {e}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="micro" style={{ marginBottom: 6 }}>Days per week</div>
+        <div className="xscroll" style={{ display: "flex", gap: 7 }}>
+          {DAYS.map((d) => (
+            <button key={d} className="pill" data-active={days === d ? "true" : "false"} onClick={() => { setDays(days === d ? null : d); touch(); }}>
+              {d}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="field">
+        <label htmlFor="coachInjuries">Injuries or limitations</label>
+        <input
+          id="coachInjuries"
+          className="input"
+          value={injuries}
+          onChange={(e) => { setInjuries(e.target.value); touch(); }}
+          placeholder="e.g. left shoulder — no heavy overhead"
+          style={{ padding: "12px 14px", fontSize: 13.5 }}
+        />
+      </div>
+      <div className="field">
+        <label htmlFor="coachPrefs">Anything else the coach should know</label>
+        <input
+          id="coachPrefs"
+          className="input"
+          value={preferences}
+          onChange={(e) => { setPreferences(e.target.value); touch(); }}
+          placeholder="e.g. short sessions, hates leg press"
+          style={{ padding: "12px 14px", fontSize: 13.5 }}
+        />
+      </div>
+      <button
+        className="btn btn-primary btn-block"
+        style={{ minHeight: 44 }}
+        disabled={saved}
+        onClick={() => {
+          onSave({
+            goal: goal || null,
+            experience: experience || null,
+            days_per_week: days,
+            injuries: injuries.trim() || null,
+            preferences: preferences.trim() || null,
+          });
+          setSaved(true);
+        }}
+      >
+        {saved ? "Saved" : "Save profile"}
+      </button>
+    </div>
+  );
+}
 
 export function SettingsScreen({ state }: { state: GymLogState }) {
   return (
@@ -73,6 +172,9 @@ export function SettingsScreen({ state }: { state: GymLogState }) {
         <div className="micro" style={{ marginBottom: 9 }}>
           Coach
         </div>
+        {state.supabaseEnabled && state.authed && (
+          <CoachProfileCard key={state.profile ? "loaded" : "empty"} profile={state.profile} onSave={state.saveCoachProfile} />
+        )}
         <div className="card" style={{ padding: 16, marginBottom: 20, gap: 10 }}>
           <div>
             <div style={{ fontSize: 14.5, fontWeight: 600 }}>Voice</div>
