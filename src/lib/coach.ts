@@ -10,7 +10,8 @@
 // the recent conversation — that's what makes the coach personal.
 
 import "server-only";
-import { COACH, EX, fallbackReply, readOut, round1, PROGRESS_EXERCISES, parseDateLabel, type ChatContext } from "@/lib/gymlog";
+import { COACH, EX, fallbackReply, localISODate, readOut, round1, PROGRESS_EXERCISES, parseDateLabel, type ChatContext } from "@/lib/gymlog";
+import { ACTIONS_PROMPT, CHAT_RESPONSE_SCHEMA, sanitizeActions, type CoachProposal } from "@/lib/coachActions";
 import type { CoachUserData } from "@/lib/coachData";
 
 const SYSTEM_PROMPT = `You are the coach voice for Gym Log, a personal workout tracker.
@@ -27,9 +28,11 @@ interface GeminiCallOptions {
   prompt: string;
   json?: boolean;
   maxTokens?: number;
+  /** Thinking tokens to allow. Counts against maxTokens on 2.5-era models. */
+  thinking?: number;
 }
 
-async function callGemini({ prompt, json = false, maxTokens = 400 }: GeminiCallOptions): Promise<string | null> {
+async function callGemini({ prompt, json = false, maxTokens = 400, thinking = 0 }: GeminiCallOptions): Promise<string | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
@@ -46,23 +49,10 @@ async function callGemini({ prompt, json = false, maxTokens = 400 }: GeminiCallO
         generationConfig: {
           temperature: 0.4,
           maxOutputTokens: maxTokens,
-          // Coach replies are short; without this, 2.5-era models spend the
+          // Coach replies are short; left unbounded, 2.5-era models spend the
           // whole token budget on hidden "thinking" and the reply truncates.
-          thinkingConfig: { thinkingBudget: 0 },
-          ...(json
-            ? {
-                responseMimeType: "application/json",
-                responseSchema: {
-                  type: "OBJECT",
-                  properties: {
-                    reply: { type: "STRING" },
-                    add_note: { type: "STRING", nullable: true },
-                    resolve_note_ids: { type: "ARRAY", items: { type: "STRING" } },
-                  },
-                  required: ["reply"],
-                },
-              }
-            : {}),
+          thinkingConfig: { thinkingBudget: thinking },
+          ...(json ? { responseMimeType: "application/json", responseSchema: CHAT_RESPONSE_SCHEMA } : {}),
         },
       }),
     });
@@ -193,17 +183,25 @@ export interface CoachChatResult {
   text: string;
   addNote: string | null;
   resolveNoteIds: string[];
+  /** Log changes the coach wants to make — nothing is written until the lifter confirms. */
+  proposals: CoachProposal[];
+}
+
+const EMPTY: Omit<CoachChatResult, "text"> = { addNote: null, resolveNoteIds: [], proposals: [] };
+
+function todayISOFrom(context: ChatContext): string {
+  return context.todayISO && /^\d{4}-\d{2}-\d{2}$/.test(context.todayISO) ? context.todayISO : localISODate();
 }
 
 export async function judgeChat(message: string, context: ChatContext = {}, data?: CoachUserData): Promise<CoachChatResult> {
   const prompt = data ? buildPersonalChatPrompt(message, context, data) : buildSeedChatPrompt(message, context);
-  const raw = await callGemini({ prompt, json: Boolean(data), maxTokens: data ? 500 : 200 });
+  const raw = await callGemini(data ? { prompt, json: true, maxTokens: 700 } : { prompt, maxTokens: 200 });
 
-  if (raw === null) return { text: fallbackReply(message, context), addNote: null, resolveNoteIds: [] };
-  if (!data) return { text: raw, addNote: null, resolveNoteIds: [] };
+  if (raw === null) return { text: fallbackReply(message, context), ...EMPTY };
+  if (!data) return { text: raw, ...EMPTY };
 
   try {
-    const parsed = JSON.parse(raw) as { reply?: unknown; add_note?: unknown; resolve_note_ids?: unknown };
+    const parsed = JSON.parse(raw) as { reply?: unknown; add_note?: unknown; resolve_note_ids?: unknown; actions?: unknown };
     const knownIds = new Set(data.notes.map((n) => n.id));
     return {
       text: typeof parsed.reply === "string" && parsed.reply.trim() ? parsed.reply.trim() : fallbackReply(message, context),
@@ -211,14 +209,24 @@ export async function judgeChat(message: string, context: ChatContext = {}, data
       resolveNoteIds: (Array.isArray(parsed.resolve_note_ids) ? parsed.resolve_note_ids : []).filter(
         (id): id is string => typeof id === "string" && knownIds.has(id)
       ),
+      proposals: sanitizeActions(parsed.actions, data.history, todayISOFrom(context)),
     };
   } catch {
-    return { text: raw, addNote: null, resolveNoteIds: [] };
+    // Truncated or malformed JSON: keep the reply if it made it out intact,
+    // and drop the actions rather than guess at them.
+    console.error("Coach JSON parse failed", raw.slice(0, 200));
+    const salvaged = raw.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    const text = salvaged ? JSON.parse(`"${salvaged[1]}"`) : fallbackReply(message, context);
+    return { text, ...EMPTY };
   }
 }
 
 function buildPersonalChatPrompt(message: string, context: ChatContext, data: CoachUserData): string {
+  const known = Object.keys(data.history).join(", ") || "none yet";
   return `${personalContext(data, context)}
+
+Exercises in this lifter's log (use these exact names): ${known}
+Today's date: ${todayISOFrom(context)}
 
 The lifter now asks: "${message}"
 
@@ -227,7 +235,9 @@ Also maintain your notes: if the lifter reports something worth remembering acro
 (pain, a constraint, a schedule change, a preference), set add_note to one short sentence.
 If they say an existing note no longer applies, put that note's id in resolve_note_ids.
 Otherwise leave add_note null and resolve_note_ids empty. Never note trivia.
-Return JSON: {"reply": "...", "add_note": null, "resolve_note_ids": []}.`;
+
+${ACTIONS_PROMPT}
+Return JSON: {"reply": "...", "add_note": null, "resolve_note_ids": [], "actions": []}.`;
 }
 
 function buildSeedChatPrompt(message: string, context: ChatContext): string {

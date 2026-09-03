@@ -1,7 +1,34 @@
 import { useEffect, useRef } from "react";
 import { Icon } from "@/components/IconSprite";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import type { GymLogState } from "@/lib/useGymLog";
+import { proposalText } from "@/lib/coachActions";
+import type { GymLogState, ProposalCard } from "@/lib/useGymLog";
+
+/** A change the coach wants to make to the log. Nothing happens until Confirm. */
+function ProposalCardView({ card, state, msgId }: { card: ProposalCard; state: GymLogState; msgId: number }) {
+  const { proposal, status } = card;
+  return (
+    <div className="card" style={{ padding: "12px 14px", marginLeft: 35, maxWidth: "78%", gap: 9 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.4 }}>
+        {proposalText(proposal, state.units, state.todayISO, "propose")}
+      </div>
+      {status === "pending" && (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-primary" style={{ flex: 1, minHeight: 38 }} onClick={() => state.applyProposal(msgId, proposal.id)}>
+            Confirm
+          </button>
+          <button className="btn btn-secondary" style={{ flex: 1, minHeight: 38 }} onClick={() => state.dismissProposal(msgId, proposal.id)}>
+            Skip
+          </button>
+        </div>
+      )}
+      {status === "applying" && <div style={{ fontSize: 12, opacity: 0.6 }}>Saving…</div>}
+      {status === "done" && <span className="tag tag-accent-2" style={{ alignSelf: "flex-start" }}>Done</span>}
+      {status === "dismissed" && <span className="tag tag-neutral" style={{ alignSelf: "flex-start" }}>Skipped</span>}
+      {status === "failed" && <div style={{ fontSize: 12, opacity: 0.7 }}>Couldn&apos;t save that. Check you&apos;re signed in and try again.</div>}
+    </div>
+  );
+}
 
 function Avatar({ pulse }: { pulse?: boolean }) {
   return (
@@ -66,9 +93,14 @@ export function ChatScreen({ state }: { state: GymLogState }) {
         style={{ flex: 1, minHeight: 0, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12 }}
       >
         {state.msgs.map((m) => (
-          <div key={m.id} className="msg" data-who={m.who}>
-            <Avatar />
-            <div className="bub">{m.text}</div>
+          <div key={m.id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="msg" data-who={m.who}>
+              <Avatar />
+              <div className="bub">{m.text}</div>
+            </div>
+            {m.proposals?.map((card) => (
+              <ProposalCardView key={card.proposal.id} card={card} state={state} msgId={m.id} />
+            ))}
           </div>
         ))}
         {state.typing && (

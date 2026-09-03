@@ -25,15 +25,20 @@ import {
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, getSupabaseClient } from "@/lib/supabase";
 import {
+  appendCoachMessage,
+  correctSets,
   importHistory,
   loadChatMessages,
   loadHistory,
   loadProfile,
+  logSets,
+  removeSets,
   saveProfile,
   saveSet,
   seedIfEmpty,
   type CoachProfile,
 } from "@/lib/db";
+import { proposalText, type CoachProposal } from "@/lib/coachActions";
 import {
   deleteOauthConnection,
   fetchNotionPages,
@@ -63,10 +68,19 @@ export type Theme = "light" | "dark";
 export type Voice = "direct" | "detailed";
 export type OnOff = "on" | "off";
 
+export type ProposalStatus = "pending" | "applying" | "done" | "dismissed" | "failed";
+
+/** A change the coach proposed with this message; written only on Confirm. */
+export interface ProposalCard {
+  proposal: CoachProposal;
+  status: ProposalStatus;
+}
+
 export interface ChatMessage {
   id: number;
   who: "coach" | "user";
   text: string;
+  proposals?: ProposalCard[];
 }
 
 export interface LoggedSet {
@@ -374,6 +388,7 @@ export function useGymLog() {
     thinkTimeout.current = setTimeout(async () => {
       clearInterval(thinkInterval.current);
       let replyText: string;
+      let proposals: ProposalCard[] | undefined;
       try {
         const res = await fetch("/api/coach", {
           method: "POST",
@@ -386,6 +401,7 @@ export function useGymLog() {
               const latest = findLatestSession(history, now);
               return {
                 todayLabel: getTodayInfo(now).label,
+                todayISO: localISODate(now),
                 nextDay: resolveDay(history, now).day,
                 lastSessionDay: latest?.day,
                 lastSessionDate: latest?.date,
@@ -395,10 +411,13 @@ export function useGymLog() {
         });
         const data = res.ok ? await res.json() : null;
         replyText = data?.text ?? "I only judge what is in the log. Ask me about an exercise by name, or what is on today.";
+        if (Array.isArray(data?.proposals) && data.proposals.length) {
+          proposals = (data.proposals as CoachProposal[]).map((proposal) => ({ proposal, status: "pending" }));
+        }
       } catch {
         replyText = "I only judge what is in the log. Ask me about an exercise by name, or what is on today.";
       }
-      const reply: ChatMessage = { id: msgIdRef.current++, who: "coach", text: replyText };
+      const reply: ChatMessage = { id: msgIdRef.current++, who: "coach", text: replyText, proposals };
       setMsgs((m) => m.concat(reply));
       setTyping(false);
     }, 2400);
@@ -652,6 +671,81 @@ export function useGymLog() {
     setNext: () => pickDay(d),
   }));
 
+  const setProposalStatus = useCallback((msgId: number, proposalId: string, status: ProposalStatus) => {
+    setMsgs((m) =>
+      m.map((msg) =>
+        msg.id !== msgId || !msg.proposals
+          ? msg
+          : { ...msg, proposals: msg.proposals.map((c) => (c.proposal.id === proposalId ? { ...c, status } : c)) }
+      )
+    );
+  }, []);
+
+  // The lifter tapped Confirm on a coach proposal: this is the only place a
+  // coach-initiated change reaches the log. A receipt line goes into the chat
+  // (and the saved conversation) so the coach knows it happened next time.
+  const applyProposal = useCallback(
+    (msgId: number, proposalId: string) => {
+      const card = msgs.find((m) => m.id === msgId)?.proposals?.find((c) => c.proposal.id === proposalId);
+      if (!card || card.status !== "pending") return;
+      const p = card.proposal;
+      const today = todayInfo.iso || localISODate();
+      setProposalStatus(msgId, proposalId, "applying");
+
+      void (async () => {
+        try {
+          if (p.type === "set_next_day") {
+            pickDay(p.day);
+          } else {
+            if (!isSupabaseConfigured || !authed) throw new Error("Not signed in");
+            if (p.type === "log_sets") {
+              await logSets({
+                exercise: p.exercise,
+                muscleGroup: p.muscleGroup,
+                date: p.date,
+                weightKg: p.weightKg,
+                reps: p.reps,
+                sets: p.sets,
+                rpe: p.rpe,
+              });
+              if (p.date === today) {
+                setLogged((l) =>
+                  l.concat({
+                    name: p.exercise,
+                    summary: loadSummary({ w: p.weightKg, sets: p.sets, reps: p.reps }, units) + (p.rpe ? ` · RPE ${p.rpe}` : ""),
+                  })
+                );
+                setLoggedOn(today);
+                setLoggedPromptOn(today);
+              }
+            } else if (p.type === "correct_sets") {
+              await correctSets({ exercise: p.exercise, date: p.date, weightKg: p.weightKg, reps: p.reps, rpe: p.rpe });
+            } else {
+              await removeSets({ exercise: p.exercise, date: p.date });
+            }
+            setHistory(await loadHistory());
+          }
+
+          setProposalStatus(msgId, proposalId, "done");
+          const receipt = proposalText(p, units, today, "done");
+          setMsgs((m) => m.concat({ id: msgIdRef.current++, who: "coach", text: receipt }));
+          if (isSupabaseConfigured && authed) {
+            void appendCoachMessage(receipt).catch((err) => console.error("Receipt save failed", err));
+          }
+        } catch (err) {
+          console.error("Coach action failed", err);
+          setProposalStatus(msgId, proposalId, "failed");
+        }
+      })();
+    },
+    [msgs, authed, units, todayInfo.iso, pickDay, setProposalStatus]
+  );
+
+  const dismissProposal = useCallback(
+    (msgId: number, proposalId: string) => setProposalStatus(msgId, proposalId, "dismissed"),
+    [setProposalStatus]
+  );
+
   const todayPlan = planForDay(currentNextDay, history).map((name) => {
     const hist = history[name].hist;
     const last = hist[hist.length - 1];
@@ -736,6 +830,9 @@ export function useGymLog() {
     thinkWord: THINKING[thinkI % THINKING.length],
     thinkKey: thinkI,
     say,
+    todayISO: todayInfo.iso,
+    applyProposal,
+    dismissProposal,
     activeEx,
     exGroup: history[activeEx]?.group ?? EX[activeEx].group,
     readOutData: ro,

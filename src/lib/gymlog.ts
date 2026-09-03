@@ -176,6 +176,8 @@ export interface LastSessionInfo {
 
 export interface ChatContext {
   todayLabel?: string;
+  /** The lifter's local date (YYYY-MM-DD) — anchors "today"/"yesterday" in coach actions. */
+  todayISO?: string;
   nextDay?: string;
   lastSessionDay?: string;
   lastSessionDate?: string;

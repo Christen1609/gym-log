@@ -15,6 +15,7 @@ function readContext(value: unknown): ChatContext {
   const raw = value as Record<string, unknown>;
   return {
     todayLabel: typeof raw.todayLabel === "string" ? raw.todayLabel : undefined,
+    todayISO: typeof raw.todayISO === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.todayISO) ? raw.todayISO : undefined,
     nextDay: typeof raw.nextDay === "string" ? raw.nextDay : undefined,
     lastSessionDay: typeof raw.lastSessionDay === "string" ? raw.lastSessionDay : undefined,
     lastSessionDate: typeof raw.lastSessionDate === "string" ? raw.lastSessionDate : undefined,
@@ -73,7 +74,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ text: result.text });
+    // Proposals go back unwritten; the browser applies them on confirm.
+    return NextResponse.json({ text: result.text, proposals: result.proposals });
   }
 
   // The app asks on sign-in; the coach speaks first when a week has passed.

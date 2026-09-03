@@ -272,40 +272,67 @@ export async function importHistory(
   return { sessions: fresh.length, sets: setRows.length, skipped };
 }
 
-/** Writes a confirmed parse, reusing today's session if there already is one. */
-export async function saveSet(parsed: ParsedSet): Promise<void> {
-  const supabase = getSupabaseClient();
-  const today = localISODate();
+type Client = ReturnType<typeof getSupabaseClient>;
 
-  const { data: exercise, error: exError } = await supabase
+async function findExercise(supabase: Client, name: string): Promise<{ id: string; muscle_group: string | null } | null> {
+  const { data, error } = await supabase
     .from("exercises")
     .select("id, muscle_group")
-    .eq("name", parsed.name)
+    .ilike("name", name.replace(/[%_]/g, "\\$&"))
+    .limit(1)
     .maybeSingle();
-  if (exError) throw exError;
-  if (!exercise) throw new Error(`Unknown exercise: ${parsed.name}`);
+  if (error) throw error;
+  return (data as { id: string; muscle_group: string | null } | null) ?? null;
+}
 
-  const { data: existing, error: findError } = await supabase
-    .from("sessions")
-    .select("id")
-    .eq("date", today)
-    .maybeSingle();
-  if (findError) throw findError;
+async function findSession(supabase: Client, date: string): Promise<string | null> {
+  const { data, error } = await supabase.from("sessions").select("id").eq("date", date).maybeSingle();
+  if (error) throw error;
+  return (data?.id as string | undefined) ?? null;
+}
 
-  let sessionId: string;
-  if (existing) {
-    sessionId = existing.id as string;
-  } else {
+export interface LogSetsInput {
+  exercise: string;
+  /** Only used when the exercise has to be created. */
+  muscleGroup?: string | null;
+  date: string;
+  weightKg: number;
+  reps: number;
+  sets: number;
+  rpe: number | null;
+  note?: string | null;
+}
+
+/**
+ * Appends sets to the session on `date`, creating the session — and the
+ * exercise, if it's new — as needed. Set numbering continues from whatever
+ * is already logged for that exercise that day.
+ */
+export async function logSets(input: LogSetsInput): Promise<void> {
+  const supabase = getSupabaseClient();
+
+  let exercise = await findExercise(supabase, input.exercise);
+  if (!exercise) {
+    const { data, error } = await supabase
+      .from("exercises")
+      .insert({ name: input.exercise, muscle_group: input.muscleGroup ?? null, is_compound: false })
+      .select("id, muscle_group")
+      .single();
+    if (error) throw error;
+    exercise = data as { id: string; muscle_group: string | null };
+  }
+
+  let sessionId = await findSession(supabase, input.date);
+  if (!sessionId) {
     const { data: created, error: createError } = await supabase
       .from("sessions")
-      .insert({ date: today, day_label: (exercise.muscle_group as string) ?? "Session" })
+      .insert({ date: input.date, day_label: exercise.muscle_group ?? "Session" })
       .select("id")
       .single();
     if (createError) throw createError;
     sessionId = created.id as string;
   }
 
-  // Continue the numbering rather than restarting at 1 for this exercise.
   const { data: last, error: lastError } = await supabase
     .from("sets")
     .select("set_no")
@@ -317,16 +344,96 @@ export async function saveSet(parsed: ParsedSet): Promise<void> {
   if (lastError) throw lastError;
   const startAt = ((last?.set_no as number) ?? 0) + 1;
 
-  const rows = Array.from({ length: parsed.sets }, (_, i) => ({
+  const rows = Array.from({ length: input.sets }, (_, i) => ({
     session_id: sessionId,
     exercise_id: exercise.id,
     set_no: startAt + i,
-    weight: parsed.weight,
-    reps: parsed.reps,
-    rpe: parsed.rpe,
-    felt_note: i === parsed.sets - 1 ? parsed.note || null : null,
+    weight: input.weightKg,
+    reps: input.reps,
+    rpe: input.rpe,
+    felt_note: i === input.sets - 1 ? input.note || null : null,
   }));
 
   const { error: insertError } = await supabase.from("sets").insert(rows);
   if (insertError) throw insertError;
+}
+
+/** Writes a confirmed parse from the composer into today's session. */
+export function saveSet(parsed: ParsedSet): Promise<void> {
+  return logSets({
+    exercise: parsed.name,
+    date: localISODate(),
+    weightKg: parsed.weight,
+    reps: parsed.reps,
+    sets: parsed.sets,
+    rpe: parsed.rpe,
+    note: parsed.note || null,
+  });
+}
+
+export interface CorrectSetsInput {
+  exercise: string;
+  date: string;
+  weightKg: number | null;
+  reps: number | null;
+  rpe: number | null;
+}
+
+/** Rewrites every set of one exercise in one session; returns how many changed. */
+export async function correctSets(input: CorrectSetsInput): Promise<number> {
+  const supabase = getSupabaseClient();
+  const exercise = await findExercise(supabase, input.exercise);
+  if (!exercise) throw new Error(`Unknown exercise: ${input.exercise}`);
+  const sessionId = await findSession(supabase, input.date);
+  if (!sessionId) throw new Error(`No session on ${input.date}`);
+
+  const patch: Record<string, number> = {};
+  if (input.weightKg !== null) patch.weight = input.weightKg;
+  if (input.reps !== null) patch.reps = input.reps;
+  if (input.rpe !== null) patch.rpe = input.rpe;
+  if (!Object.keys(patch).length) return 0;
+
+  const { data, error } = await supabase
+    .from("sets")
+    .update(patch)
+    .eq("session_id", sessionId)
+    .eq("exercise_id", exercise.id)
+    .select("id");
+  if (error) throw error;
+  return data?.length ?? 0;
+}
+
+/** Deletes one exercise's sets from one session, and the session too if that empties it. */
+export async function removeSets(input: { exercise: string; date: string }): Promise<number> {
+  const supabase = getSupabaseClient();
+  const exercise = await findExercise(supabase, input.exercise);
+  if (!exercise) throw new Error(`Unknown exercise: ${input.exercise}`);
+  const sessionId = await findSession(supabase, input.date);
+  if (!sessionId) throw new Error(`No session on ${input.date}`);
+
+  const { data, error } = await supabase
+    .from("sets")
+    .delete()
+    .eq("session_id", sessionId)
+    .eq("exercise_id", exercise.id)
+    .select("id");
+  if (error) throw error;
+
+  const { count, error: countError } = await supabase
+    .from("sets")
+    .select("id", { count: "exact", head: true })
+    .eq("session_id", sessionId);
+  if (countError) throw countError;
+  if ((count ?? 0) === 0) {
+    const { error: sessionError } = await supabase.from("sessions").delete().eq("id", sessionId);
+    if (sessionError) throw sessionError;
+  }
+  return data?.length ?? 0;
+}
+
+/** A coach line the app wrote itself (e.g. the receipt for a confirmed action). */
+export async function appendCoachMessage(text: string): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.from("coach_messages").insert({ who: "coach", text });
+  if (error) throw error;
 }
