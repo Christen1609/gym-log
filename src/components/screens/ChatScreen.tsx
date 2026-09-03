@@ -101,6 +101,15 @@ export function ChatScreen({ state }: { state: GymLogState }) {
             {m.proposals?.map((card) => (
               <ProposalCardView key={card.proposal.id} card={card} state={state} msgId={m.id} />
             ))}
+            {(m.proposals?.filter((c) => c.status === "pending").length ?? 0) > 1 && (
+              <button
+                className="btn btn-primary"
+                style={{ marginLeft: 35, maxWidth: "78%", minHeight: 40 }}
+                onClick={() => state.applyAllProposals(m.id)}
+              >
+                Confirm all
+              </button>
+            )}
           </div>
         ))}
         {state.typing && (

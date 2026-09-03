@@ -195,7 +195,8 @@ function todayISOFrom(context: ChatContext): string {
 
 export async function judgeChat(message: string, context: ChatContext = {}, data?: CoachUserData): Promise<CoachChatResult> {
   const prompt = data ? buildPersonalChatPrompt(message, context, data) : buildSeedChatPrompt(message, context);
-  const raw = await callGemini(data ? { prompt, json: true, maxTokens: 700 } : { prompt, maxTokens: 200 });
+  // A pasted whole session can come back as a dozen action lines.
+  const raw = await callGemini(data ? { prompt, json: true, maxTokens: 1400 } : { prompt, maxTokens: 200 });
 
   if (raw === null) return { text: fallbackReply(message, context), ...EMPTY };
   if (!data) return { text: raw, ...EMPTY };

@@ -50,14 +50,21 @@ export const CHAT_RESPONSE_SCHEMA = {
 export const ACTIONS_PROMPT = `You can also change the log, but only by proposing: each action becomes a card the lifter
 confirms or skips, so nothing is written until they tap Confirm. Fill "actions" ONLY when they
 clearly ask you to record, fix, or remove training, or to change which day is next. Never
-invent sets they did not mention. One line per exercise they mention — an exercise that is
-not in the log yet is fine, just add its muscle_group.
+invent sets they did not mention. An exercise that is not in the log yet is fine — add its
+muscle_group. Map loose names onto the log's exact names (e.g. "shoulder press" → Overhead
+Press, "cable flyes" → Cable Fly, "inclined dumbbell" → Incline Dumbbell Press).
 Each action is ONE plain text line: the type, then key=value pairs, separated by " | ".
-- log_sets | exercise=<name> | date=<YYYY-MM-DD; "yesterday" etc. relative to today; default today> | weight_kg=<number in kg; convert lb> | reps=<n, required> | sets=<n, default 1> | rpe=<n, only if given> | muscle_group=<${MUSCLE_GROUPS.join("/")}, only for a new exercise>
+- log_sets | exercise=<name> | date=<YYYY-MM-DD; "yesterday", "the 1st" etc. relative to today; default today> | weight_kg=<number in kg; convert lb> | reps=<n, required> | sets=<n, default 1> | rpe=<n, only if given> | muscle_group=<${MUSCLE_GROUPS.join("/")}, only for a new exercise>
 - correct_sets | exercise=<name> | date=<YYYY-MM-DD of the session to fix; omit for their latest> | then only what changes: weight_kg=, reps=, rpe=
 - remove_sets | exercise=<name> | date=<YYYY-MM-DD>
 - set_next_day | day=<${ROT.join("/")}>
 Example: "log_sets | exercise=Bench Press | date=2026-09-03 | weight_kg=82.5 | reps=5 | sets=3 | rpe=8"
+Rules for a whole session described in one message:
+- Different weights for one exercise → one log_sets line per weight, in the order they did them.
+- "Same as last time" → use that exercise's last numbers from the log above.
+- A rep range ("4 to 6") → the lower number. Skip warm-up sets.
+- A failed set (0 reps) or unknown reps → do not log it; say what is missing in the reply so
+  they can tell you.
 When you propose, the reply says what you are putting up for confirmation, in one plain
 line — never say it is already logged. Otherwise leave actions empty.`;
 
@@ -91,7 +98,9 @@ export function parseActionLine(line: string): Record<string, unknown> | null {
   return out;
 }
 
-const MAX_ACTIONS = 5;
+// A whole session pasted in one message is ~10 lines (several exercises,
+// several weights each), so the cap has to leave room for that.
+const MAX_ACTIONS = 12;
 const MAX_DAYS_BACK = 400;
 
 const num = (v: unknown): number | null => {
@@ -153,7 +162,7 @@ export function sanitizeActions(raw: unknown, history: Record<string, ExerciseDa
   const out: CoachProposal[] = [];
   const seen = new Set<string>();
 
-  for (const item of raw.slice(0, MAX_ACTIONS * 4)) {
+  for (const item of raw.slice(0, MAX_ACTIONS * 2)) {
     if (out.length >= MAX_ACTIONS) break;
     const a = typeof item === "string" ? parseActionLine(item) : item && typeof item === "object" ? (item as Record<string, unknown>) : null;
     if (!a) continue;

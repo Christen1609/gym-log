@@ -681,6 +681,10 @@ export function useGymLog() {
     );
   }, []);
 
+  // Writes run one at a time: two log_sets for the same new date would
+  // otherwise race to create that session and leave two of them.
+  const applyQueue = useRef<Promise<void>>(Promise.resolve());
+
   // The lifter tapped Confirm on a coach proposal: this is the only place a
   // coach-initiated change reaches the log. A receipt line goes into the chat
   // (and the saved conversation) so the coach knows it happened next time.
@@ -692,7 +696,7 @@ export function useGymLog() {
       const today = todayInfo.iso || localISODate();
       setProposalStatus(msgId, proposalId, "applying");
 
-      void (async () => {
+      applyQueue.current = applyQueue.current.then(async () => {
         try {
           if (p.type === "set_next_day") {
             pickDay(p.day);
@@ -736,9 +740,19 @@ export function useGymLog() {
           console.error("Coach action failed", err);
           setProposalStatus(msgId, proposalId, "failed");
         }
-      })();
+      });
     },
     [msgs, authed, units, todayInfo.iso, pickDay, setProposalStatus]
+  );
+
+  // "Confirm all" on a message with several cards; each still gets its own
+  // receipt and its own Done/failed state.
+  const applyAllProposals = useCallback(
+    (msgId: number) => {
+      const cards = msgs.find((m) => m.id === msgId)?.proposals ?? [];
+      for (const c of cards) if (c.status === "pending") applyProposal(msgId, c.proposal.id);
+    },
+    [msgs, applyProposal]
   );
 
   const dismissProposal = useCallback(
@@ -832,6 +846,7 @@ export function useGymLog() {
     say,
     todayISO: todayInfo.iso,
     applyProposal,
+    applyAllProposals,
     dismissProposal,
     activeEx,
     exGroup: history[activeEx]?.group ?? EX[activeEx].group,
