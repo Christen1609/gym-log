@@ -40,7 +40,12 @@ export async function loadCoachData(supa: RequestSupabase): Promise<CoachUserDat
       .order("set_no"),
     client.from("profiles").select("goal, experience, days_per_week, injuries, preferences").maybeSingle(),
     client.from("coach_notes").select("id, note, created_at").eq("status", "active").order("created_at"),
-    client.from("coach_messages").select("who, text, created_at").order("created_at", { ascending: false }).limit(12),
+    client
+      .from("coach_messages")
+      .select("who, text, created_at")
+      .order("created_at", { ascending: false })
+      .order("who", { ascending: true })
+      .limit(12),
     client
       .from("coach_messages")
       .select("created_at")

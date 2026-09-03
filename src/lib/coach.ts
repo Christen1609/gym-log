@@ -231,6 +231,7 @@ Today's date: ${todayISOFrom(context)}
 The lifter now asks: "${message}"
 
 Answer as the coach, personally — their goal, injuries, notes and numbers above are yours to use.
+Answer what was asked; never repeat a line you already said in the recent conversation.
 Also maintain your notes: if the lifter reports something worth remembering across sessions
 (pain, a constraint, a schedule change, a preference), set add_note to one short sentence.
 If they say an existing note no longer applies, put that note's id in resolve_note_ids.

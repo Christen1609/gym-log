@@ -53,10 +53,13 @@ export async function POST(req: NextRequest) {
     if (user) {
       const client = user.supa.client;
       // Persistence is best-effort: a failed write must never eat the reply.
+      // Explicit timestamps: one insert would stamp both rows with the same
+      // created_at and the reload could show the reply before the question.
+      const now = Date.now();
       const writes: PromiseLike<unknown>[] = [
         client.from("coach_messages").insert([
-          { who: "user", text: body.message },
-          { who: "coach", text: result.text },
+          { who: "user", text: body.message, created_at: new Date(now).toISOString() },
+          { who: "coach", text: result.text, created_at: new Date(now + 1).toISOString() },
         ]),
       ];
       if (result.addNote) writes.push(client.from("coach_notes").insert({ note: result.addNote }));

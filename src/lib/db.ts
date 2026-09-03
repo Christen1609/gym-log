@@ -177,10 +177,13 @@ export interface StoredChatMessage {
 /** The recent conversation, oldest first, so the chat reopens where it left off. */
 export async function loadChatMessages(limit = 30): Promise<StoredChatMessage[]> {
   const supabase = getSupabaseClient();
+  // Older rows share a timestamp per turn; "coach" < "user" here so that after
+  // the reverse the question still comes before its reply.
   const { data, error } = await supabase
     .from("coach_messages")
     .select("who, text, created_at")
     .order("created_at", { ascending: false })
+    .order("who", { ascending: true })
     .limit(limit);
   if (error) throw error;
   return ((data ?? []) as { who: "user" | "coach"; text: string }[]).map(({ who, text }) => ({ who, text })).reverse();
