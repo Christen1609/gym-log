@@ -46,3 +46,6 @@ next-env.d.ts
 supabase/.temp/
 
 .vercel
+
+# superpowers execution scratch
+.superpowers/
