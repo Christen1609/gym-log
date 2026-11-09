@@ -17,6 +17,7 @@ import {
   planForDay,
   readOut,
   resolveDay,
+  unnotedGaps,
   round1,
   toDisplayWeight,
   type ExerciseData,
@@ -103,6 +104,8 @@ interface PersistedState {
   loggedPromptOn: string;
   /** ISO date `logged` belongs to — cleared when a new day starts. */
   loggedOn: string;
+  /** `${day}:${iso}` of the last "you didn't note…" reminder the lifter dismissed. */
+  gapsDismissed: string;
 }
 
 const STORAGE_KEY = "gymlog:v1";
@@ -172,6 +175,7 @@ export function useGymLog() {
   const [dayOverrideOn, setDayOverrideOn] = useState("");
   const [loggedOn, setLoggedOn] = useState("");
   const [loggedPromptOn, setLoggedPromptOn] = useState("");
+  const [gapsDismissed, setGapsDismissed] = useState("");
   const [todayInfo, setTodayInfo] = useState<TodayInfo>(DEFAULT_TODAY);
   const [hydrated, setHydrated] = useState(false);
   // Guards the reminder so it opens at most once per mount, and never on top
@@ -228,6 +232,7 @@ export function useGymLog() {
     if (p.dayOverrideOn) setDayOverrideOn(p.dayOverrideOn);
     if (p.loggedOn) setLoggedOn(p.loggedOn);
     if (p.loggedPromptOn) setLoggedPromptOn(p.loggedPromptOn);
+    if (p.gapsDismissed) setGapsDismissed(p.gapsDismissed);
     const manualToken = loadNotionToken();
     if (manualToken) setNotionConn({ token: manualToken, workspace: null, source: "token" });
     setHydrated(true);
@@ -317,13 +322,14 @@ export function useGymLog() {
       dayOverrideOn,
       loggedPromptOn,
       loggedOn,
+      gapsDismissed,
     };
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch {
       /* storage unavailable — non-fatal */
     }
-  }, [hydrated, logged, units, voice, rpeAsk, theme, dayOverride, dayOverrideOn, loggedPromptOn, loggedOn]);
+  }, [hydrated, logged, units, voice, rpeAsk, theme, dayOverride, dayOverrideOn, loggedPromptOn, loggedOn, gapsDismissed]);
 
   useEffect(() => {
     const refreshToday = () => setTodayInfo(getTodayInfo());
@@ -774,6 +780,21 @@ export function useGymLog() {
     };
   });
 
+  // What wasn't noted last time this day came round. Shown on Today until the
+  // lifter dismisses it; the key ties the dismissal to that one session, so
+  // the next gappy session of this day reminds again.
+  const gapSource = todayInfo.iso ? unnotedGaps(currentNextDay, history, todayInfo.iso) : null;
+  const gapKey = gapSource ? `${currentNextDay}:${gapSource.iso}` : "";
+  const gaps =
+    gapSource && gapKey !== gapsDismissed
+      ? {
+          day: currentNextDay,
+          date: gapSource.date,
+          items: gapSource.items.map((g) => ({ exercise: g.exercise, missing: g.missing.join(" and ") })),
+        }
+      : null;
+  const dismissGaps = useCallback(() => setGapsDismissed(gapKey), [gapKey]);
+
   const progressCards = PROGRESS_EXERCISES.filter((name) => history[name]?.hist.length).map((name) => {
     const r = readOut(name, history);
     return {
@@ -840,6 +861,8 @@ export function useGymLog() {
       ? `After ${latestSession.day.toLowerCase()} on ${latestSession.date}`
       : "No sessions logged yet",
     todayPlan,
+    gaps,
+    dismissGaps,
     logged,
     submitText,
     msgs,

@@ -121,6 +121,35 @@ export function TodayScreen({ state }: { state: GymLogState }) {
           </div>
         )}
 
+        {state.gaps && (
+          <div
+            role="status"
+            style={{
+              marginBottom: 18,
+              padding: "14px 16px",
+              borderRadius: 22,
+              background: "color-mix(in srgb, var(--color-accent) 14%, transparent)",
+            }}
+          >
+            <div className="micro" style={{ marginBottom: 6 }}>
+              Not noted last {state.gaps.day.toLowerCase()} day · {state.gaps.date}
+            </div>
+            <p style={{ margin: "0 0 8px", fontSize: 13.5, lineHeight: 1.45 }}>
+              Note these today so the read-out can track them:
+            </p>
+            <ul style={{ margin: "0 0 12px", paddingLeft: 18, fontSize: 14, lineHeight: 1.6 }}>
+              {state.gaps.items.map((g) => (
+                <li key={g.exercise}>
+                  <strong>{g.exercise}</strong> — {g.missing}
+                </li>
+              ))}
+            </ul>
+            <button className="btn btn-secondary" onClick={state.dismissGaps} style={{ minHeight: 40, width: "100%" }}>
+              Got it
+            </button>
+          </div>
+        )}
+
         <div className="micro" style={{ marginBottom: 8 }}>
           Planned · last time
         </div>

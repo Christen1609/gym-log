@@ -10,7 +10,7 @@
 // the recent conversation — that's what makes the coach personal.
 
 import "server-only";
-import { COACH, EX, fallbackReply, localISODate, readOut, round1, PROGRESS_EXERCISES, parseDateLabel, type ChatContext } from "@/lib/gymlog";
+import { COACH, EX, fallbackReply, loadSummary, localISODate, readOut, round1, PROGRESS_EXERCISES, parseDateLabel, type ChatContext } from "@/lib/gymlog";
 import { ACTIONS_PROMPT, CHAT_RESPONSE_SCHEMA, sanitizeActions, type CoachProposal } from "@/lib/coachActions";
 import type { CoachUserData } from "@/lib/coachData";
 
@@ -93,7 +93,11 @@ function numbersBlock(data: CoachUserData): string {
       const ro = readOut(name, data.history);
       const last = ro.hist[ro.hist.length - 1];
       const rpe = ro.rpes.length ? `, RPE ${ro.rpes[0]} → ${ro.rpes[ro.rpes.length - 1]}` : "";
-      return `${name}: last ${last.date} ${last.w} kg ${last.sets}×${last.reps}, est 1RM ${round1(ro.e1rm)} kg, ${
+      const lastText = `${name}: last ${last.date} ${loadSummary(last, "kg")}`;
+      // Nothing fully noted yet: there is no trend to report, and the coach
+      // must not be handed a 0 to repeat.
+      if (ro.e1rm === 0) return `${lastText}, no trend yet (weight or reps not noted)`;
+      return `${lastText}, est 1RM ${round1(ro.e1rm)} kg, ${
         ro.pct >= 0 ? "+" : ""
       }${round1(ro.pct)}% over ${ro.hist.length} sessions${rpe}, status ${ro.status}`;
     })
