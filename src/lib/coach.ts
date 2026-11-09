@@ -96,7 +96,7 @@ function numbersBlock(data: CoachUserData): string {
       const lastText = `${name}: last ${last.date} ${loadSummary(last, "kg")}`;
       // Nothing fully noted yet: there is no trend to report, and the coach
       // must not be handed a 0 to repeat.
-      if (ro.e1rm === 0) return `${lastText}, no trend yet (weight or reps not noted)`;
+      if (ro.e1rm === null) return `${lastText}, no trend yet (weight or reps not noted)`;
       return `${lastText}, est 1RM ${round1(ro.e1rm)} kg, ${
         ro.pct >= 0 ? "+" : ""
       }${round1(ro.pct)}% over ${ro.hist.length} sessions${rpe}, status ${ro.status}`;
@@ -171,10 +171,14 @@ function buildExercisePrompt(name: string, history: CoachUserData["history"] | u
     ? `RPE ${ro.rpes[0]} → ${ro.rpes[ro.rpes.length - 1]}`
     : "RPE not logged this stretch";
   const profile = data ? `Lifter profile:\n${profileBlock(data)}\n\nYour open notes on this lifter:\n${notesBlock(data)}\n\n` : "";
+  const trendLines =
+    ro.e1rm === null
+      ? "- est 1RM: none — weight or reps were not noted, so there is no trend to judge yet"
+      : `- est 1RM now: ${round1(ro.e1rm)} kg
+- change over the tracked window: ${ro.pct >= 0 ? "+" : ""}${round1(ro.pct)}%`;
   return `${profile}Exercise: ${name}
 Computed numbers (do not alter, do not invent others):
-- est 1RM now: ${round1(ro.e1rm)} kg
-- change over the tracked window: ${ro.pct >= 0 ? "+" : ""}${round1(ro.pct)}%
+${trendLines}
 - ${rpeLine}
 - status: ${ro.status}
 
@@ -249,6 +253,7 @@ Return JSON: {"reply": "...", "add_note": null, "resolve_note_ids": [], "actions
 function buildSeedChatPrompt(message: string, context: ChatContext): string {
   const numbers = PROGRESS_EXERCISES.map((name) => {
     const ro = readOut(name);
+    if (ro.e1rm === null) return `${name}: no trend yet (weight or reps not noted)`;
     return `${name}: est 1RM ${round1(ro.e1rm)} kg, ${ro.pct >= 0 ? "+" : ""}${round1(ro.pct)}%, status ${ro.status}`;
   }).join("\n");
   const todayFacts = [

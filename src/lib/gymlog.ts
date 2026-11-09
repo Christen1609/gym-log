@@ -349,7 +349,8 @@ export function unnotedGaps(
 
 export interface ReadOut {
   hist: SetRow[];
-  e1rm: number;
+  /** null when no entry has both weight and reps noted — there is nothing to compute. */
+  e1rm: number | null;
   pct: number;
   rpeDelta: number;
   status: Status;
@@ -366,14 +367,14 @@ export function readOut(name: string, data: Record<string, ExerciseData> = EX): 
   // A brand-new account, or an exercise never logged: report a flat, empty
   // trend rather than throwing. The UI renders this as "not logged".
   if (h.length === 0) {
-    return { hist: [], e1rm: 0, pct: 0, rpeDelta: 0, status: "flat", rpes: [], spark: () => "" };
+    return { hist: [], e1rm: null, pct: 0, rpeDelta: 0, status: "flat", rpes: [], spark: () => "" };
   }
 
   // Only entries with both numbers noted can feed est 1RM; the rest stay in
   // `hist` so the lifter still sees the session happened.
   const noted = h.filter((s): s is SetRow & { w: number; reps: number } => s.w !== null && s.reps !== null);
   if (noted.length === 0) {
-    return { hist: h, e1rm: 0, pct: 0, rpeDelta: 0, status: "flat", rpes: [], spark: () => "" };
+    return { hist: h, e1rm: null, pct: 0, rpeDelta: 0, status: "flat", rpes: [], spark: () => "" };
   }
 
   const e = noted.map((s) => epley(s.w, s.reps));

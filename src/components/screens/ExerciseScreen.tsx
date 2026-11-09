@@ -38,15 +38,17 @@ export function ExerciseScreen({ state }: { state: GymLogState }) {
                 est 1RM · Epley
               </div>
               <div className="num" style={{ fontFamily: "var(--font-heading)", fontSize: 38, lineHeight: 1 }}>
-                {round1(state.cv(ro.e1rm))} {units}
+                {ro.e1rm === null ? "not noted" : `${round1(state.cv(ro.e1rm))} ${units}`}
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, paddingBottom: 6 }}>
               <TrendArrows status={ro.status} />
-              <span className="num" style={{ fontSize: 15, fontWeight: 700 }}>
-                {ro.pct >= 0 ? "+" : ""}
-                {round1(ro.pct)}%
-              </span>
+              {ro.e1rm !== null && (
+                <span className="num" style={{ fontSize: 15, fontWeight: 700 }}>
+                  {ro.pct >= 0 ? "+" : ""}
+                  {round1(ro.pct)}%
+                </span>
+              )}
             </div>
           </div>
           <svg viewBox="0 0 100 30" preserveAspectRatio="none" style={{ width: "100%", height: 56, marginTop: 6, overflow: "visible" }}>

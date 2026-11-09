@@ -68,10 +68,10 @@ describe("unnoted numbers", () => {
     expect(ro.spark(40)).not.toContain("NaN");
   });
 
-  it("readOut with only unnoted entries reports an empty, flat trend", () => {
+  it("readOut with only unnoted entries has no est 1RM rather than a zero", () => {
     const data = { "Calf Raises": { group: "Legs", hist: [{ date: "Nov 9", w: 20, sets: 3, reps: null, rpe: null }] } };
     const ro = readOut("Calf Raises", data);
-    expect(ro).toMatchObject({ e1rm: 0, pct: 0, status: "flat" });
+    expect(ro).toMatchObject({ e1rm: null, pct: 0, status: "flat" });
     expect(ro.hist).toHaveLength(1);
   });
 

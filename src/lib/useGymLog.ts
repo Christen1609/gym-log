@@ -803,7 +803,7 @@ export function useGymLog() {
       spark: r.spark(26),
       coach: coachText[name] ?? COACH[name],
       delta: `${r.pct >= 0 ? "+" : ""}${round1(r.pct)}%`,
-      computed: `est 1RM ${round1(r.e1rm)} ${units} · RPE ${
+      computed: `est 1RM ${r.e1rm === null ? "not noted" : `${round1(r.e1rm)} ${units}`} · RPE ${
         r.rpes.length ? `${r.rpes[0]} → ${r.rpes[r.rpes.length - 1]}` : "not logged"
       }`,
       open: () => openExercise(name, "progress"),

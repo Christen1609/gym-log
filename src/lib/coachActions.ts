@@ -83,6 +83,9 @@ const FIELD_ALIASES: Record<string, string> = {
   set: "sets",
 };
 
+const NOT_GIVEN =
+  /^(null|none|n\/a|-|omit|unknown|\?+|not noted|not given|not remembered|don['’]?t remember|do not remember|to failure|failure|amrap|bodyweight|body weight|bw)$/i;
+
 /** "log_sets | exercise=Bench Press | weight_kg=80" → { type, exercise, weight_kg }. */
 export function parseActionLine(line: string): Record<string, unknown> | null {
   const parts = line
@@ -96,7 +99,9 @@ export function parseActionLine(line: string): Record<string, unknown> | null {
     if (eq < 0) continue;
     const key = part.slice(0, eq).trim().toLowerCase();
     const value = part.slice(eq + 1).trim();
-    if (!value || /^(null|none|n\/a|-|omit)$/i.test(value)) continue;
+    // Values that mean "I don't know this number" are treated as left out, so
+    // the set is logged with that number not noted instead of being dropped.
+    if (!value || NOT_GIVEN.test(value)) continue;
     out[FIELD_ALIASES[key] ?? key] = value;
   }
   return out;

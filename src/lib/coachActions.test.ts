@@ -43,3 +43,15 @@ describe("coach logs sets with numbers that weren't noted", () => {
     expect(ACTIONS_PROMPT).toMatch(/still log it/);
   });
 });
+
+describe("coach says it doesn't know a number", () => {
+  it.each(["unknown", "?", "not noted", "don't remember", "to failure"])("keeps the set when reps=%s", (v) => {
+    const [p] = sanitizeActions([`log_sets | exercise=Calf Raises | weight_kg=20 | reps=${v} | sets=3`], history, TODAY);
+    expect(p).toMatchObject({ exercise: "Calf Raises", weightKg: 20, reps: null, sets: 3 });
+  });
+
+  it("keeps a bodyweight set with its weight not noted", () => {
+    const [p] = sanitizeActions(["log_sets | exercise=Pull Up | weight_kg=bodyweight | reps=8 | sets=3"], history, TODAY);
+    expect(p).toMatchObject({ exercise: "Pull Up", weightKg: null, reps: 8 });
+  });
+});
