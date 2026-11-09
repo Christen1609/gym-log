@@ -5,7 +5,7 @@
 // writes when the lifter taps Confirm. Shared by both sides, so it must stay
 // free of server-only and browser-only imports.
 
-import { ALIAS, ROT, formatHistDate, localISODate, parseDateLabel, toDisplayWeight, type ExerciseData, type Units } from "@/lib/gymlog";
+import { ALIAS, ROT, formatHistDate, loadSummary, localISODate, parseDateLabel, toDisplayWeight, type ExerciseData, type Units } from "@/lib/gymlog";
 
 export const MUSCLE_GROUPS = ["Chest", "Back", "Arms", "Legs", "Shoulders", "Core"];
 export const ACTION_TYPES = ["log_sets", "correct_sets", "remove_sets", "set_next_day"] as const;
@@ -18,8 +18,10 @@ export type CoachProposal =
       newExercise: boolean;
       muscleGroup: string | null;
       date: string;
-      weightKg: number;
-      reps: number;
+      /** null when the lifter didn't remember it — logged as "not noted". */
+      weightKg: number | null;
+      /** null when the lifter didn't remember it — logged as "not noted". */
+      reps: number | null;
       sets: number;
       rpe: number | null;
     }
@@ -54,7 +56,7 @@ invent sets they did not mention. An exercise that is not in the log yet is fine
 muscle_group. Map loose names onto the log's exact names (e.g. "shoulder press" → Overhead
 Press, "cable flyes" → Cable Fly, "inclined dumbbell" → Incline Dumbbell Press).
 Each action is ONE plain text line: the type, then key=value pairs, separated by " | ".
-- log_sets | exercise=<name> | date=<YYYY-MM-DD; "yesterday", "the 1st" etc. relative to today; default today> | weight_kg=<number in kg; convert lb> | reps=<n, required> | sets=<n, default 1> | rpe=<n, only if given> | muscle_group=<${MUSCLE_GROUPS.join("/")}, only for a new exercise>
+- log_sets | exercise=<name> | date=<YYYY-MM-DD; "yesterday", "the 1st" etc. relative to today; default today> | weight_kg=<number in kg; convert lb; omit if not remembered> | reps=<n; omit if not remembered> | sets=<n, default 1> | rpe=<n, only if given> | muscle_group=<${MUSCLE_GROUPS.join("/")}, only for a new exercise>
 - correct_sets | exercise=<name> | date=<YYYY-MM-DD of the session to fix; omit for their latest> | then only what changes: weight_kg=, reps=, rpe=
 - remove_sets | exercise=<name> | date=<YYYY-MM-DD>
 - set_next_day | day=<${ROT.join("/")}>
@@ -63,8 +65,10 @@ Rules for a whole session described in one message:
 - Different weights for one exercise → one log_sets line per weight, in the order they did them.
 - "Same as last time" → use that exercise's last numbers from the log above.
 - A rep range ("4 to 6") → the lower number. Skip warm-up sets.
-- A failed set (0 reps) or unknown reps → do not log it; say what is missing in the reply so
-  they can tell you.
+- Reps or weight they don't remember → still log it: leave that field out and it is saved as
+  "not noted". Never guess a number. In the reply, say which numbers were not noted — the app
+  reminds them at their next session of that day.
+- A failed set (0 reps) → do not log it.
 When you propose, the reply says what you are putting up for confirmation, in one plain
 line — never say it is already logged. Otherwise leave actions empty.`;
 
@@ -171,11 +175,17 @@ export function sanitizeActions(raw: unknown, history: Record<string, ExerciseDa
 
     if (a.type === "log_sets") {
       const name = str(a.exercise)?.slice(0, 60);
-      const weightKg = num(a.weight_kg);
-      const reps = int(a.reps, 1, 100);
+      // Weight and reps are optional: a number the lifter didn't remember is
+      // logged as "not noted" rather than dropped. One that was given but is
+      // out of range still sinks the action — that's a bad number, not a gap.
+      const rawWeight = num(a.weight_kg);
+      const reps = a.reps === undefined ? null : int(a.reps, 1, 100);
       const sets = int(a.sets, 1, 20) ?? 1;
       const date = readDate(a.date, todayISO);
-      if (!name || weightKg === null || weightKg < 0 || weightKg > 500 || reps === null || date === null) continue;
+      if (!name || date === null) continue;
+      if (a.weight_kg !== undefined && (rawWeight === null || rawWeight < 0 || rawWeight > 500)) continue;
+      if (a.reps !== undefined && reps === null) continue;
+      const weightKg = rawWeight === null ? null : Math.round(rawWeight * 4) / 4;
       const matched = matchExercise(name, history);
       const group = str(a.muscle_group);
       const muscleGroup = group ? MUSCLE_GROUPS.find((g) => g.toLowerCase() === group.toLowerCase()) ?? null : null;
@@ -186,7 +196,7 @@ export function sanitizeActions(raw: unknown, history: Record<string, ExerciseDa
         newExercise: !matched,
         muscleGroup: matched ? null : muscleGroup,
         date: date === "absent" ? todayISO : date,
-        weightKg: Math.round(weightKg * 4) / 4,
+        weightKg,
         reps,
         sets,
         rpe: rpeOf(a.rpe),
@@ -235,9 +245,10 @@ export function proposalText(p: CoachProposal, units: Units, todayISO: string, t
 
   switch (p.type) {
     case "log_sets":
-      return `${done ? "Logged" : "Log"} ${p.exercise}${p.newExercise ? " (new exercise)" : ""}: ${w(p.weightKg)} × ${p.sets}×${p.reps}${
-        p.rpe ? ` @ RPE ${p.rpe}` : ""
-      }, ${when(p.date)}.`;
+      return `${done ? "Logged" : "Log"} ${p.exercise}${p.newExercise ? " (new exercise)" : ""}: ${loadSummary(
+        { w: p.weightKg, sets: p.sets, reps: p.reps },
+        units
+      )}${p.rpe ? ` @ RPE ${p.rpe}` : ""}, ${when(p.date)}.`;
     case "correct_sets": {
       const parts = [
         p.weightKg !== null ? `weight → ${w(p.weightKg)}` : null,

@@ -299,8 +299,9 @@ export interface LogSetsInput {
   /** Only used when the exercise has to be created. */
   muscleGroup?: string | null;
   date: string;
-  weightKg: number;
-  reps: number;
+  /** null = not noted; needs migration 0003 (weight/reps nullable). */
+  weightKg: number | null;
+  reps: number | null;
   sets: number;
   rpe: number | null;
   note?: string | null;
