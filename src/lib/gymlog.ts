@@ -11,9 +11,11 @@ export type Status = "up" | "grind" | "flat" | "down";
 
 export interface SetRow {
   date: string;
-  w: number;
+  /** null when the lifter didn't note it — kept in history, left out of the maths. */
+  w: number | null;
   sets: number;
-  reps: number;
+  /** null when the lifter didn't note it — kept in history, left out of the maths. */
+  reps: number | null;
   rpe: number | null;
   note?: string;
 }
@@ -156,6 +158,9 @@ export const PROGRESS_EXERCISES = ["Bench Press", "Barbell Row", "Overhead Press
 // ── compute (deterministic, never the LLM) ──────────────────────────────
 
 export const epley = (w: number, r: number) => w * (1 + r / 30);
+/** Est 1RM of one history entry, or null when its weight or reps weren't noted. */
+export const entryE1rm = (s: { w: number | null; reps: number | null }) =>
+  s.w === null || s.reps === null ? null : epley(s.w, s.reps);
 export const round1 = (n: number) => Math.round(n * 10) / 10;
 export const toDisplayWeight = (w: number, units: Units) =>
   units === "lb" ? Math.round(w * 2.2046 * 2) / 2 : w;
@@ -323,11 +328,18 @@ export function readOut(name: string, data: Record<string, ExerciseData> = EX): 
     return { hist: [], e1rm: 0, pct: 0, rpeDelta: 0, status: "flat", rpes: [], spark: () => "" };
   }
 
-  const e = h.map((s) => epley(s.w, s.reps));
+  // Only entries with both numbers noted can feed est 1RM; the rest stay in
+  // `hist` so the lifter still sees the session happened.
+  const noted = h.filter((s): s is SetRow & { w: number; reps: number } => s.w !== null && s.reps !== null);
+  if (noted.length === 0) {
+    return { hist: h, e1rm: 0, pct: 0, rpeDelta: 0, status: "flat", rpes: [], spark: () => "" };
+  }
+
+  const e = noted.map((s) => epley(s.w, s.reps));
   const first = e[0];
   const last = e[e.length - 1];
   const pct = ((last - first) / first) * 100;
-  const rpes = h.map((s) => s.rpe).filter((v): v is number => v !== null && v !== undefined);
+  const rpes = noted.map((s) => s.rpe).filter((v): v is number => v !== null && v !== undefined);
   const rpeDelta = rpes.length > 1 ? rpes[rpes.length - 1] - rpes[0] : 0;
 
   let status: Status = "flat";
@@ -349,7 +361,7 @@ export function readOut(name: string, data: Record<string, ExerciseData> = EX): 
       e
         .map(
           (v, i) =>
-            ((i / (e.length - 1)) * 100).toFixed(1) +
+            ((e.length > 1 ? i / (e.length - 1) : 1) * 100).toFixed(1) +
             "," +
             (hgt - 2 - ((v - min) / span) * (hgt - 4)).toFixed(1)
         )
@@ -416,8 +428,8 @@ export interface HistoryExerciseRow {
 export interface HistorySetRow {
   exercise_id: string;
   session_id: string;
-  weight: number;
-  reps: number;
+  weight: number | null;
+  reps: number | null;
   rpe: number | null;
   felt_note: string | null;
   date: string; // the session's ISO date
@@ -449,22 +461,25 @@ export function collapseHistory(exercises: HistoryExerciseRow[], sets: HistorySe
     const sessions = byExercise.get(row.exercise_id)!;
     const existing = sessions.get(row.session_id);
 
+    const weight = row.weight === null ? null : Number(row.weight);
+    const reps = row.reps === null ? null : Number(row.reps);
     if (!existing) {
       sessions.set(row.session_id, {
         date: formatHistDate(row.date),
-        w: Number(row.weight),
+        w: weight,
         sets: 1,
-        reps: Number(row.reps),
+        reps,
         rpe: row.rpe === null ? null : Number(row.rpe),
         note: row.felt_note ?? "",
         _iso: row.date,
       });
     } else {
       existing.sets += 1;
-      // The heaviest set of a session is the one the UI reports as the load.
-      if (Number(row.weight) > existing.w) {
-        existing.w = Number(row.weight);
-        existing.reps = Number(row.reps);
+      // The heaviest set of a session is the one the UI reports as the load;
+      // a noted weight always beats an unnoted one.
+      if (weight !== null && (existing.w === null || weight > existing.w)) {
+        existing.w = weight;
+        existing.reps = reps;
       }
       if (row.rpe !== null) existing.rpe = Number(row.rpe);
       if (row.felt_note) existing.note = row.felt_note;
@@ -480,8 +495,11 @@ export function collapseHistory(exercises: HistoryExerciseRow[], sets: HistorySe
   return result;
 }
 
-export function loadSummary(s: { w: number; sets: number; reps: number; rpe?: number | null }, units: Units) {
+export function loadSummary(s: { w: number | null; sets: number; reps: number | null; rpe?: number | null }, units: Units) {
+  if (s.w === null && s.reps === null) return `${s.sets} sets · not noted`;
+  if (s.w === null) return `${s.sets}×${s.reps} · weight not noted`;
   const w = toDisplayWeight(s.w, units);
+  if (s.reps === null) return `${w} ${units} × ${s.sets} sets · reps not noted`;
   return `${w} ${units} × ${s.sets}×${s.reps}`;
 }
 

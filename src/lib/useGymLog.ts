@@ -8,7 +8,7 @@ import {
   ROT,
   THINKING,
   Units,
-  epley,
+  entryE1rm,
   findLatestSession,
   getTodayInfo,
   loadSummary,
@@ -766,7 +766,10 @@ export function useGymLog() {
     return {
       name,
       last: loadSummary(last, units) + (last.rpe ? ` · RPE ${last.rpe}` : " · no RPE"),
-      est: `${round1(cv(epley(last.w, last.reps)))} ${units}`,
+      est: (() => {
+        const e = entryE1rm(last);
+        return e === null ? "not noted" : `${round1(cv(e))} ${units}`;
+      })(),
       open: () => openExercise(name, "today"),
     };
   });

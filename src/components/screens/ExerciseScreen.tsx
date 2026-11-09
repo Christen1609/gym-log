@@ -1,5 +1,5 @@
 import { Icon } from "@/components/IconSprite";
-import { round1, loadSummary, epley } from "@/lib/gymlog";
+import { round1, loadSummary, entryE1rm } from "@/lib/gymlog";
 import type { GymLogState } from "@/lib/useGymLog";
 
 function TrendArrows({ status, size = 18 }: { status: string; size?: number }) {
@@ -144,7 +144,10 @@ export function ExerciseScreen({ state }: { state: GymLogState }) {
                     {r.rpe === null || r.rpe === undefined ? "—" : r.rpe}
                   </td>
                   <td className="num" style={{ fontSize: 13, textAlign: "right", fontWeight: 700 }}>
-                    {round1(state.cv(epley(r.w, r.reps)))}
+                    {(() => {
+                      const e = entryE1rm(r);
+                      return e === null ? "—" : round1(state.cv(e));
+                    })()}
                   </td>
                 </tr>
               ))}
