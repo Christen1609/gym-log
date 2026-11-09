@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { collapseHistory, entryE1rm, loadSummary, readOut, type HistoryExerciseRow, type HistorySetRow } from "@/lib/gymlog";
+import {
+  collapseHistory,
+  entryE1rm,
+  loadSummary,
+  readOut,
+  unnotedGaps,
+  type ExerciseData,
+  type HistoryExerciseRow,
+  type HistorySetRow,
+} from "@/lib/gymlog";
 
 const ex = (id: string, name: string, muscle_group = "Legs"): HistoryExerciseRow => ({
   id,
@@ -79,5 +88,47 @@ describe("entryE1rm", () => {
     expect(entryE1rm({ w: 90, reps: 3 })).toBeCloseTo(99);
     expect(entryE1rm({ w: 20, reps: null })).toBeNull();
     expect(entryE1rm({ w: null, reps: 12 })).toBeNull();
+  });
+});
+
+describe("unnotedGaps", () => {
+  const legs = (hist: ExerciseData["hist"]): ExerciseData => ({ group: "Legs · accessory", hist });
+  const history: Record<string, ExerciseData> = {
+    "Back Squat": { group: "Legs · compound", hist: [{ date: "9 Nov", w: 100, sets: 1, reps: 9, rpe: null }] },
+    "Calf Raises": legs([{ date: "9 Nov", w: 20, sets: 3, reps: null, rpe: null }]),
+    "Hamstring Curls": legs([{ date: "9 Nov", w: null, sets: 3, reps: null, rpe: null }]),
+    "Bench Press": { group: "Chest · compound", hist: [{ date: "10 Nov", w: null, sets: 3, reps: null, rpe: null }] },
+  };
+
+  it("lists what wasn't noted at the last session of that day", () => {
+    expect(unnotedGaps("Legs", history, "2026-11-12")).toEqual({
+      iso: "2026-11-09",
+      date: "9 Nov",
+      items: [
+        { exercise: "Calf Raises", missing: ["reps"] },
+        { exercise: "Hamstring Curls", missing: ["weight", "reps"] },
+      ],
+    });
+  });
+
+  it("ignores other day types", () => {
+    expect(unnotedGaps("Back", history, "2026-11-12")).toBeNull();
+  });
+
+  it("is null once a later session of that day was fully noted", () => {
+    const later = {
+      ...history,
+      "Calf Raises": legs([...history["Calf Raises"].hist, { date: "16 Nov", w: 20, sets: 3, reps: 15, rpe: null }]),
+      "Hamstring Curls": legs([...history["Hamstring Curls"].hist]),
+    };
+    expect(unnotedGaps("Legs", later, "2026-11-20")).toBeNull();
+  });
+
+  it("looks at the session before today, not today's own", () => {
+    const today = {
+      ...history,
+      "Back Squat": { group: "Legs · compound", hist: [...history["Back Squat"].hist, { date: "16 Nov", w: 100, sets: 1, reps: null, rpe: null }] },
+    };
+    expect(unnotedGaps("Legs", today, "2026-11-16")?.iso).toBe("2026-11-09");
   });
 });

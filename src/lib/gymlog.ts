@@ -306,6 +306,47 @@ export function planForDay(day: string, data: Record<string, ExerciseData> = EX)
     .map(([name]) => name);
 }
 
+export interface UnnotedGaps {
+  /** ISO date of the session the gaps come from — with the day, the reminder's identity. */
+  iso: string;
+  /** That session's date as history labels it ("9 Nov"). */
+  date: string;
+  items: { exercise: string; missing: ("weight" | "reps")[] }[];
+}
+
+/**
+ * What the lifter didn't note at their last session of this rotation day
+ * (before today), so the next one can remind them. Null when nothing is
+ * missing — a later, fully noted session of the same day clears it.
+ */
+export function unnotedGaps(
+  day: string,
+  data: Record<string, ExerciseData>,
+  todayISO: string
+): UnnotedGaps | null {
+  const reference = new Date(`${todayISO}T12:00:00`);
+  const entries = planForDay(day, data).flatMap((exercise) =>
+    data[exercise].hist.flatMap((row) => {
+      const parsed = parseDateLabel(row.date, reference);
+      return parsed ? [{ exercise, row, iso: localISODate(parsed) }] : [];
+    })
+  );
+  const before = entries.filter((e) => e.iso < todayISO);
+  if (!before.length) return null;
+
+  const iso = before.reduce((max, e) => (e.iso > max ? e.iso : max), before[0].iso);
+  const items = before
+    .filter((e) => e.iso === iso && (e.row.w === null || e.row.reps === null))
+    .map((e) => ({
+      exercise: e.exercise,
+      missing: [e.row.w === null ? "weight" : null, e.row.reps === null ? "reps" : null].filter(
+        (m): m is "weight" | "reps" => m !== null
+      ),
+    }));
+  if (!items.length) return null;
+  return { iso, date: before.find((e) => e.iso === iso)!.row.date, items };
+}
+
 export interface ReadOut {
   hist: SetRow[];
   e1rm: number;
