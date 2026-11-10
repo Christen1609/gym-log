@@ -20,3 +20,6 @@ create policy "own cardio" on gymlog.cardio
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 grant all on gymlog.cardio to anon, authenticated, service_role;
+
+-- Let the API see the new table straight away.
+notify pgrst, 'reload schema';
