@@ -90,6 +90,33 @@ export function ProgressScreen({ state }: { state: GymLogState }) {
             );
           })}
         </div>
+        {state.recentCardio.length > 0 && (
+          <div style={{ marginTop: 22 }}>
+            <div className="micro" style={{ marginBottom: 8 }}>
+              Recent cardio
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              {state.recentCardio.map((c) => (
+                <div
+                  key={c.key}
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    padding: "11px 15px",
+                    borderRadius: 22,
+                    background: "var(--color-surface)",
+                    fontSize: 14,
+                  }}
+                >
+                  <span className="num" style={{ opacity: 0.6, flex: "none", minWidth: 48 }}>
+                    {c.date}
+                  </span>
+                  <span>{c.summary}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

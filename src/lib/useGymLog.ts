@@ -18,6 +18,10 @@ import {
   readOut,
   resolveDay,
   unnotedGaps,
+  cardioSummary,
+  daysSinceTraining,
+  formatHistDate,
+  type CardioEntry,
   round1,
   toDisplayWeight,
   type ExerciseData,
@@ -29,9 +33,11 @@ import {
   appendCoachMessage,
   correctSets,
   importHistory,
+  loadCardio,
   loadChatMessages,
   loadHistory,
   loadProfile,
+  logCardio,
   logSets,
   removeSets,
   saveProfile,
@@ -189,6 +195,7 @@ export function useGymLog() {
   const [history, setHistory] = useState<Record<string, ExerciseData>>(EX);
   const [syncing, setSyncing] = useState(false);
   const [profile, setProfile] = useState<CoachProfile | null>(null);
+  const [cardio, setCardio] = useState<CardioEntry[]>([]);
 
   // Progressive enhancement: seed with the fallback copy immediately (so the
   // app matches the prototype offline with zero flicker), then let the real
@@ -249,6 +256,7 @@ export function useGymLog() {
       setAuthed(signedIn);
       if (!signedIn) {
         setHistory(EX);
+        setCardio([]);
         return;
       }
       setSyncing(true);
@@ -261,6 +269,9 @@ export function useGymLog() {
         await seedIfEmpty();
         const h = await loadHistory();
         setHistory(h);
+        void loadCardio()
+          .then(setCardio)
+          .catch((err) => console.error("Cardio load failed", err));
 
         // The coach's memory: reopen the saved conversation and profile.
         const [stored, prof] = await Promise.all([loadChatMessages(), loadProfile()]);
@@ -660,7 +671,8 @@ export function useGymLog() {
 
   // A session is "missing" once a full day has gone by without one. That is
   // what the prompt asks about, and it is derived, never stored.
-  const daysSinceLast = resolved.daysSinceLast;
+  // Cardio counts as training here (and only here — it never moves the rotation).
+  const daysSinceLast = daysSinceTraining(resolved.daysSinceLast, cardio, todayInfo.iso || localISODate());
   const workoutUnlogged = daysSinceLast === null || daysSinceLast >= 1;
 
   const pickDay = useCallback(
@@ -725,6 +737,14 @@ export function useGymLog() {
                     summary: loadSummary({ w: p.weightKg, sets: p.sets, reps: p.reps }, units) + (p.rpe ? ` · RPE ${p.rpe}` : ""),
                   })
                 );
+                setLoggedOn(today);
+                setLoggedPromptOn(today);
+              }
+            } else if (p.type === "log_cardio") {
+              await logCardio({ date: p.date, kind: p.kind, minutes: p.minutes, distanceKm: p.distanceKm, note: p.note });
+              setCardio(await loadCardio());
+              if (p.date === today) {
+                setLogged((l) => l.concat({ name: "Cardio", summary: cardioSummary(p) }));
                 setLoggedOn(today);
                 setLoggedPromptOn(today);
               }
@@ -861,6 +881,7 @@ export function useGymLog() {
       ? `After ${latestSession.day.toLowerCase()} on ${latestSession.date}`
       : "No sessions logged yet",
     todayPlan,
+    recentCardio: cardio.slice(0, 5).map((e, i) => ({ key: `${e.date}-${i}`, date: formatHistDate(e.date), summary: cardioSummary(e) })),
     gaps,
     dismissGaps,
     logged,
