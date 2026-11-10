@@ -632,3 +632,29 @@ export function toCardioEntry(row: {
     note: row.note,
   };
 }
+
+/**
+ * The missing-workout sheet's two lines. `days` counts any training (cardio
+ * included); the detail names the last *lifting* session, because that is
+ * what the rotation runs on — so the two never contradict each other.
+ */
+export function reminderCopy(args: {
+  days: number | null;
+  lastLiftDay: string | null;
+  lastLiftDate: string | null;
+  dayTitle: string;
+}): { gap: string; detail: string } {
+  const { days, lastLiftDay, lastLiftDate, dayTitle } = args;
+  const gap =
+    days === null
+      ? "Nothing is in the log yet."
+      : days === 1
+        ? "You last trained yesterday."
+        : `It has been ${days} days since you last trained.`;
+  const today = `Today reads as ${dayTitle.toLowerCase()}.`;
+  const detail =
+    lastLiftDay && lastLiftDate
+      ? `Last lifting session: ${lastLiftDay.toLowerCase()} on ${lastLiftDate}. ${today}`
+      : `Log a set and the rotation starts tracking itself. ${today}`;
+  return { gap, detail };
+}

@@ -83,3 +83,26 @@ describe("coach logs cardio", () => {
     expect(ACTIONS_PROMPT).toMatch(/does not change the rotation/);
   });
 });
+
+describe("cardio numbers written loosely", () => {
+  it.each([
+    ["30 min", 30],
+    ["45 mins", 45],
+    ["1h", 60],
+    ["1.5 hours", 90],
+    ["45-60", 45],
+  ])("reads minutes=%s as %d", (v, want) => {
+    const [p] = sanitizeActions([`log_cardio | kind=bike | minutes=${v}`], history, TODAY);
+    expect(p).toMatchObject({ type: "log_cardio", minutes: want });
+  });
+
+  it("keeps the card with time not noted when minutes can't be read", () => {
+    const [p] = sanitizeActions(["log_cardio | kind=bike | minutes=a while"], history, TODAY);
+    expect(p).toMatchObject({ type: "log_cardio", minutes: null });
+  });
+
+  it("reads distance with units, converting miles", () => {
+    expect(sanitizeActions(["log_cardio | kind=run | distance_km=5 km"], history, TODAY)[0]).toMatchObject({ distanceKm: 5 });
+    expect(sanitizeActions(["log_cardio | kind=run | distance_km=3 mi"], history, TODAY)[0]).toMatchObject({ distanceKm: 4.83 });
+  });
+});

@@ -1,4 +1,5 @@
 import { Icon } from "@/components/IconSprite";
+import { reminderCopy } from "@/lib/gymlog";
 import type { GymLogState } from "@/lib/useGymLog";
 
 /**
@@ -7,19 +8,12 @@ import type { GymLogState } from "@/lib/useGymLog";
  * either way stops it asking again until tomorrow.
  */
 export function ReminderSheet({ state }: { state: GymLogState }) {
-  const days = state.daysSinceLast;
-
-  const gap =
-    days === null
-      ? "Nothing is in the log yet."
-      : days === 1
-        ? "Your last session was yesterday."
-        : `It has been ${days} days since your last session.`;
-
-  const detail =
-    state.lastSessionDay && state.lastSessionDate
-      ? `Last in: ${state.lastSessionDay.toLowerCase()} on ${state.lastSessionDate}. Today reads as ${state.dayTitle.toLowerCase()}.`
-      : `Log a set and the rotation starts tracking itself. Today reads as ${state.dayTitle.toLowerCase()}.`;
+  const { gap, detail } = reminderCopy({
+    days: state.daysSinceLast,
+    lastLiftDay: state.lastSessionDay,
+    lastLiftDate: state.lastSessionDate,
+    dayTitle: state.dayTitle,
+  });
 
   return (
     <>

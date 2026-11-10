@@ -173,6 +173,29 @@ function sessionDatesFor(exercise: string, history: Record<string, ExerciseData>
     .map((d) => localISODate(d));
 }
 
+/**
+ * Cardio minutes as the model might write them: "30", "30 min", "1h",
+ * "1.5 hours", "45-60" (low end, like rep ranges). "unreadable" when a value
+ * was given but means nothing — the caller logs time as not noted.
+ */
+function minutesOf(value: unknown): number | "unreadable" {
+  const s = str(value)?.toLowerCase();
+  if (!s) return "unreadable";
+  const m = s.match(/^(\d+(?:\.\d+)?)\s*(?:[-–to]+\s*\d+(?:\.\d+)?\s*)?(h|hr|hrs|hour|hours|m|min|mins|minute|minutes)?$/);
+  if (!m) return "unreadable";
+  const n = Number(m[1]) * (m[2] && m[2].startsWith("h") ? 60 : 1);
+  return Math.round(n);
+}
+
+/** Kilometres from "5", "5 km" or "3 mi"/"3 miles"; null when unreadable. */
+function kmOf(value: unknown): number | null {
+  const s = str(value)?.toLowerCase();
+  const m = s?.match(/^(\d+(?:\.\d+)?)\s*(km|kms|k|mi|mile|miles)?$/);
+  if (!m) return null;
+  const km = Number(m[1]) * (m[2] && m[2].startsWith("mi") ? 1.609 : 1);
+  return km > 0 && km <= 300 ? Math.round(km * 100) / 100 : null;
+}
+
 function rpeOf(value: unknown): number | null {
   const n = num(value);
   if (n === null || n < 5 || n > 10) return null;
@@ -241,9 +264,11 @@ export function sanitizeActions(raw: unknown, history: Record<string, ExerciseDa
       }
     } else if (a.type === "log_cardio") {
       const date = readDate(a.date, todayISO);
-      const minutes = a.minutes === undefined ? null : int(a.minutes, 1, 600);
-      if (date === null || (a.minutes !== undefined && minutes === null)) continue;
-      const rawKm = num(a.distance_km);
+      // A readable but impossible time (0, 1000) sinks the card; an unreadable
+      // one ("a while") is logged as time not noted, per "note down anything".
+      const read = a.minutes === undefined ? "unreadable" : minutesOf(a.minutes);
+      if (date === null || (read !== "unreadable" && (read < 1 || read > 600))) continue;
+      const minutes = read === "unreadable" ? null : read;
       const kind = str(a.kind)?.slice(0, 40) ?? "Cardio";
       proposal = {
         id,
@@ -251,7 +276,7 @@ export function sanitizeActions(raw: unknown, history: Record<string, ExerciseDa
         kind: kind.charAt(0).toUpperCase() + kind.slice(1),
         date: date === "absent" ? todayISO : date,
         minutes,
-        distanceKm: rawKm !== null && rawKm > 0 && rawKm <= 300 ? Math.round(rawKm * 100) / 100 : null,
+        distanceKm: kmOf(a.distance_km),
         note: str(a.note)?.slice(0, 120) ?? null,
       };
     } else if (a.type === "set_next_day") {

@@ -7,6 +7,7 @@ import {
   entryE1rm,
   loadSummary,
   readOut,
+  reminderCopy,
   toCardioEntry,
   unnotedGaps,
   type CardioEntry,
@@ -183,5 +184,24 @@ describe("toCardioEntry", () => {
       distanceKm: 4.2,
       note: null,
     });
+  });
+});
+
+describe("reminderCopy", () => {
+  it("counts days since any training and names the last lifting session separately", () => {
+    expect(reminderCopy({ days: 2, lastLiftDay: "Legs", lastLiftDate: "5 Nov", dayTitle: "Chest day" })).toEqual({
+      gap: "It has been 2 days since you last trained.",
+      detail: "Last lifting session: legs on 5 Nov. Today reads as chest day.",
+    });
+  });
+
+  it("handles yesterday and an empty log", () => {
+    expect(reminderCopy({ days: 1, lastLiftDay: null, lastLiftDate: null, dayTitle: "Chest day" })).toEqual({
+      gap: "You last trained yesterday.",
+      detail: "Log a set and the rotation starts tracking itself. Today reads as chest day.",
+    });
+    expect(reminderCopy({ days: null, lastLiftDay: null, lastLiftDate: null, dayTitle: "Chest day" }).gap).toBe(
+      "Nothing is in the log yet."
+    );
   });
 });
