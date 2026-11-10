@@ -4,6 +4,7 @@ import type { GymLogState } from "@/lib/useGymLog";
 const ITEMS: { icon: string; label: string; screen: Parameters<GymLogState["go"]>[0] }[] = [
   { icon: "pulse", label: "Progress read-out", screen: "progress" },
   { icon: "chat", label: "Coach", screen: "chat" },
+  { icon: "music", label: "Spotify", screen: "spotify" },
   { icon: "import", label: "Import my Notion", screen: "import" },
   { icon: "cog", label: "Settings", screen: "settings" },
 ];

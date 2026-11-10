@@ -3,7 +3,7 @@ import { Icon } from "@/components/IconSprite";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import type { GymLogState } from "@/lib/useGymLog";
 
-const SUGGESTIONS = ["What's today?", "Am I stalling?", "What is RPE?", "Log a set, or ask the coach…"];
+const SUGGESTIONS = ["What's today?", "Am I stalling?", "What is RPE?"];
 
 export function TodayScreen({ state }: { state: GymLogState }) {
   const draftRef = useRef<HTMLInputElement>(null);
@@ -18,7 +18,7 @@ export function TodayScreen({ state }: { state: GymLogState }) {
   const send = () => {
     const el = draftRef.current;
     if (!el) return;
-    state.submitText(el.value);
+    state.submitText(el.value.trim() || SUGGESTIONS[sugI]);
     el.value = "";
     setEmpty(true);
   };

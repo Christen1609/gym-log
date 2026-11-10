@@ -62,7 +62,16 @@ const OAUTH_ERRORS: Record<string, string> = {
   save: "Connected to Notion but couldn't save the connection. Try again.",
 };
 
-export type Screen = "today" | "chat" | "exercise" | "progress" | "import" | "settings";
+const SPOTIFY_ERRORS: Record<string, string> = {
+  config: "Spotify OAuth isn't configured yet.",
+  signin: "Sign in first, then connect Spotify.",
+  denied: "Spotify access was declined.",
+  state: "The Spotify connection attempt expired. Try again.",
+  exchange: "Spotify didn't accept the connection. Try again.",
+  save: "Connected to Spotify but couldn't save the connection. Try again.",
+};
+
+export type Screen = "today" | "chat" | "exercise" | "progress" | "spotify" | "import" | "settings";
 export type Sheet = "menu" | "parse" | "reminder" | null;
 export type Theme = "light" | "dark";
 export type Voice = "direct" | "detailed";
@@ -185,6 +194,7 @@ export function useGymLog() {
   const [history, setHistory] = useState<Record<string, ExerciseData>>(EX);
   const [syncing, setSyncing] = useState(false);
   const [profile, setProfile] = useState<CoachProfile | null>(null);
+  const [spotifyMessage, setSpotifyMessage] = useState<string | null>(null);
 
   // Progressive enhancement: seed with the fallback copy immediately (so the
   // app matches the prototype offline with zero flicker), then let the real
@@ -515,11 +525,22 @@ export function useGymLog() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const status = params.get("notion");
-    if (!status) return;
+    const spotifyStatus = params.get("spotify");
+    if (!status && !spotifyStatus) return;
     window.history.replaceState(null, "", window.location.pathname);
-    setScreen("import");
-    if (status === "connected") oauthReturnRef.current = true;
-    else setImportError(OAUTH_ERRORS[params.get("reason") ?? ""] ?? "Notion connection failed.");
+    if (status) {
+      setScreen("import");
+      if (status === "connected") oauthReturnRef.current = true;
+      else setImportError(OAUTH_ERRORS[params.get("reason") ?? ""] ?? "Notion connection failed.");
+    }
+    if (spotifyStatus) {
+      setScreen("spotify");
+      setSpotifyMessage(
+        spotifyStatus === "connected"
+          ? "Spotify connected."
+          : SPOTIFY_ERRORS[params.get("reason") ?? ""] ?? "Spotify connection failed."
+      );
+    }
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -861,6 +882,7 @@ export function useGymLog() {
     cv,
     openExercise,
     progressCards,
+    spotifyMessage,
     imp,
     importReset,
     notionConnected: Boolean(notionConn),
