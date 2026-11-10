@@ -569,3 +569,40 @@ export function fallbackReply(text: string, context: ChatContext = {}): string {
     return "Two moving, one grinding, one stuck. Row +14% and squat +9.5% at flat RPE. Bench is up 6.5% but RPE climbed 8 to 9 - deload it. Overhead press has not moved in five weeks.";
   return "I only judge what is in the log. Ask me about an exercise by name, or what is on today.";
 }
+
+// ── cardio ───────────────────────────────────────────────────────────────
+// A record, not a trend: cardio never feeds est 1RM, the rotation or the
+// progress read-out. It only counts as "trained" for the missing-workout
+// reminder and is listed where the lifter can see it.
+
+export interface CardioEntry {
+  /** ISO date (YYYY-MM-DD). */
+  date: string;
+  kind: string;
+  /** null when the lifter didn't note how long. */
+  minutes: number | null;
+  distanceKm: number | null;
+  note: string | null;
+}
+
+/** "Treadmill · 30 min · 5 km" — only what was noted. */
+export function cardioSummary(e: CardioEntry): string {
+  return [
+    e.kind,
+    e.minutes === null ? "time not noted" : `${e.minutes} min`,
+    e.distanceKm === null ? null : `${e.distanceKm} km`,
+    e.note || null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** Whole days since the lifter last trained — lifting or cardio, whichever is more recent. */
+export function daysSinceTraining(liftingDays: number | null, cardio: CardioEntry[], todayISO: string): number | null {
+  const today = new Date(`${todayISO}T12:00:00`);
+  const cardioDays = cardio
+    .filter((c) => c.date <= todayISO)
+    .map((c) => daysBetween(new Date(`${c.date}T12:00:00`), today));
+  const all = [liftingDays, ...cardioDays].filter((d): d is number => d !== null);
+  return all.length ? Math.min(...all) : null;
+}

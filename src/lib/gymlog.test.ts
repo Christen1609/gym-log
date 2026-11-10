@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  cardioSummary,
   collapseHistory,
+  daysSinceTraining,
   entryE1rm,
   loadSummary,
   readOut,
   unnotedGaps,
+  type CardioEntry,
   type ExerciseData,
   type HistoryExerciseRow,
   type HistorySetRow,
@@ -130,5 +133,30 @@ describe("unnotedGaps", () => {
       "Back Squat": { group: "Legs · compound", hist: [...history["Back Squat"].hist, { date: "16 Nov", w: 100, sets: 1, reps: null, rpe: null }] },
     };
     expect(unnotedGaps("Legs", today, "2026-11-16")?.iso).toBe("2026-11-09");
+  });
+});
+
+describe("cardio", () => {
+  const c = (over: Partial<CardioEntry>): CardioEntry => ({
+    date: "2026-11-10",
+    kind: "Treadmill",
+    minutes: 30,
+    distanceKm: null,
+    note: null,
+    ...over,
+  });
+
+  it("cardioSummary lists what was noted", () => {
+    expect(cardioSummary(c({ distanceKm: 5 }))).toBe("Treadmill · 30 min · 5 km");
+    expect(cardioSummary(c({ kind: "Bike", minutes: null }))).toBe("Bike · time not noted");
+    expect(cardioSummary(c({ note: "easy" }))).toBe("Treadmill · 30 min · easy");
+  });
+
+  it("daysSinceTraining counts cardio as training", () => {
+    expect(daysSinceTraining(3, [c({ date: "2026-11-10" })], "2026-11-10")).toBe(0);
+    expect(daysSinceTraining(3, [], "2026-11-10")).toBe(3);
+    expect(daysSinceTraining(null, [c({ date: "2026-11-08" })], "2026-11-10")).toBe(2);
+    expect(daysSinceTraining(null, [], "2026-11-10")).toBeNull();
+    expect(daysSinceTraining(1, [c({ date: "2026-11-12" })], "2026-11-10")).toBe(1);
   });
 });
