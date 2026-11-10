@@ -18,6 +18,8 @@ import {
   type HistorySetRow,
   type ParsedSet,
   type SetRow,
+  toCardioEntry,
+  type CardioEntry,
 } from "@/lib/gymlog";
 import { getSupabaseClient } from "@/lib/supabase";
 
@@ -440,4 +442,32 @@ export async function appendCoachMessage(text: string): Promise<void> {
   const supabase = getSupabaseClient();
   const { error } = await supabase.from("coach_messages").insert({ who: "coach", text });
   if (error) throw error;
+}
+
+// ── cardio ───────────────────────────────────────────────────────────────
+
+/** Saves one confirmed cardio session. */
+export async function logCardio(entry: CardioEntry): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.from("cardio").insert({
+    date: entry.date,
+    kind: entry.kind,
+    minutes: entry.minutes,
+    distance_km: entry.distanceKm,
+    note: entry.note,
+  });
+  if (error) throw error;
+}
+
+/** The most recent cardio sessions, newest first. */
+export async function loadCardio(limit = 30): Promise<CardioEntry[]> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("cardio")
+    .select("date, kind, minutes, distance_km, note")
+    .order("date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map(toCardioEntry);
 }

@@ -606,3 +606,29 @@ export function daysSinceTraining(liftingDays: number | null, cardio: CardioEntr
   const all = [liftingDays, ...cardioDays].filter((d): d is number => d !== null);
   return all.length ? Math.min(...all) : null;
 }
+
+/** The coach's view of recent cardio, newest first. */
+export function cardioBlock(entries: CardioEntry[]): string {
+  if (!entries.length) return "None logged.";
+  return [...entries]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .map((e) => `${formatHistDate(e.date)}: ${cardioSummary(e)}`)
+    .join("\n");
+}
+
+/** A `gymlog.cardio` row as Supabase returns it (numeric comes back as a string). */
+export function toCardioEntry(row: {
+  date: string;
+  kind: string;
+  minutes: number | null;
+  distance_km: number | string | null;
+  note: string | null;
+}): CardioEntry {
+  return {
+    date: row.date,
+    kind: row.kind,
+    minutes: row.minutes,
+    distanceKm: row.distance_km === null ? null : Number(row.distance_km),
+    note: row.note,
+  };
+}

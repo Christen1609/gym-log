@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  cardioBlock,
   cardioSummary,
   collapseHistory,
   daysSinceTraining,
   entryE1rm,
   loadSummary,
   readOut,
+  toCardioEntry,
   unnotedGaps,
   type CardioEntry,
   type ExerciseData,
@@ -158,5 +160,28 @@ describe("cardio", () => {
     expect(daysSinceTraining(null, [c({ date: "2026-11-08" })], "2026-11-10")).toBe(2);
     expect(daysSinceTraining(null, [], "2026-11-10")).toBeNull();
     expect(daysSinceTraining(1, [c({ date: "2026-11-12" })], "2026-11-10")).toBe(1);
+  });
+});
+
+describe("cardioBlock", () => {
+  it("lists recent cardio for the coach, newest first", () => {
+    const entries: CardioEntry[] = [
+      { date: "2026-11-08", kind: "Bike", minutes: 20, distanceKm: null, note: null },
+      { date: "2026-11-10", kind: "Treadmill", minutes: 30, distanceKm: 5, note: null },
+    ];
+    expect(cardioBlock(entries)).toBe("10 Nov: Treadmill · 30 min · 5 km\n8 Nov: Bike · 20 min");
+    expect(cardioBlock([])).toBe("None logged.");
+  });
+});
+
+describe("toCardioEntry", () => {
+  it("reads a cardio row, turning numeric strings into numbers", () => {
+    expect(toCardioEntry({ date: "2026-11-10", kind: "Run", minutes: 25, distance_km: "4.20", note: null })).toEqual({
+      date: "2026-11-10",
+      kind: "Run",
+      minutes: 25,
+      distanceKm: 4.2,
+      note: null,
+    });
   });
 });

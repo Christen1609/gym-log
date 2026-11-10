@@ -10,7 +10,7 @@
 // the recent conversation — that's what makes the coach personal.
 
 import "server-only";
-import { COACH, EX, fallbackReply, loadSummary, localISODate, readOut, round1, PROGRESS_EXERCISES, parseDateLabel, type ChatContext } from "@/lib/gymlog";
+import { COACH, EX, cardioBlock, fallbackReply, loadSummary, localISODate, readOut, round1, PROGRESS_EXERCISES, parseDateLabel, type ChatContext } from "@/lib/gymlog";
 import { ACTIONS_PROMPT, CHAT_RESPONSE_SCHEMA, sanitizeActions, type CoachProposal } from "@/lib/coachActions";
 import type { CoachUserData } from "@/lib/coachData";
 
@@ -150,6 +150,9 @@ ${todayFacts || "No current date facts were provided."}
 
 This lifter's computed numbers (their real log — do not invent others):
 ${numbersBlock(data)}
+
+Recent cardio (a record only — it does not change the rotation; mention it, don't judge it):
+${cardioBlock(data.cardio)}
 
 Recent conversation:
 ${recentBlock(data)}`;

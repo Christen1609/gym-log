@@ -4,7 +4,14 @@
 // rows.
 
 import "server-only";
-import { collapseHistory, type ExerciseData, type HistoryExerciseRow, type HistorySetRow } from "@/lib/gymlog";
+import {
+  collapseHistory,
+  toCardioEntry,
+  type CardioEntry,
+  type ExerciseData,
+  type HistoryExerciseRow,
+  type HistorySetRow,
+} from "@/lib/gymlog";
 import type { RequestSupabase } from "@/lib/supabaseServer";
 
 export interface CoachProfileRow {
@@ -27,12 +34,14 @@ export interface CoachUserData {
   notes: CoachNoteRow[];
   recent: { who: string; text: string }[];
   lastCheckinAt: string | null;
+  /** Recent cardio, newest first. */
+  cardio: CardioEntry[];
 }
 
 export async function loadCoachData(supa: RequestSupabase): Promise<CoachUserData> {
   const client = supa.client;
 
-  const [exercisesRes, setsRes, profileRes, notesRes, recentRes, checkinRes] = await Promise.all([
+  const [exercisesRes, setsRes, profileRes, notesRes, recentRes, checkinRes, cardioRes] = await Promise.all([
     client.from("exercises").select("id, name, muscle_group, is_compound"),
     client
       .from("sets")
@@ -53,6 +62,7 @@ export async function loadCoachData(supa: RequestSupabase): Promise<CoachUserDat
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    client.from("cardio").select("date, kind, minutes, distance_km, note").order("date", { ascending: false }).limit(14),
   ]);
 
   type JoinedRow = Omit<HistorySetRow, "date"> & { sessions: { date: string } };
@@ -69,6 +79,8 @@ export async function loadCoachData(supa: RequestSupabase): Promise<CoachUserDat
       .map(({ who, text }) => ({ who, text }))
       .reverse(),
     lastCheckinAt: (checkinRes.data as { created_at: string } | null)?.created_at ?? null,
+    // A missing cardio table (migration not applied) must not break coaching.
+    cardio: cardioRes.error ? [] : ((cardioRes.data ?? []) as Parameters<typeof toCardioEntry>[0][]).map(toCardioEntry),
   };
 }
 
