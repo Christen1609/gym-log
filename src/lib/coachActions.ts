@@ -5,10 +5,10 @@
 // writes when the lifter taps Confirm. Shared by both sides, so it must stay
 // free of server-only and browser-only imports.
 
-import { ALIAS, ROT, formatHistDate, loadSummary, localISODate, parseDateLabel, toDisplayWeight, type ExerciseData, type Units } from "@/lib/gymlog";
+import { ALIAS, ROT, cardioSummary, formatHistDate, loadSummary, localISODate, parseDateLabel, toDisplayWeight, type ExerciseData, type Units } from "@/lib/gymlog";
 
 export const MUSCLE_GROUPS = ["Chest", "Back", "Arms", "Legs", "Shoulders", "Core"];
-export const ACTION_TYPES = ["log_sets", "correct_sets", "remove_sets", "set_next_day"] as const;
+export const ACTION_TYPES = ["log_sets", "correct_sets", "remove_sets", "set_next_day", "log_cardio"] as const;
 
 export type CoachProposal =
   | {
@@ -27,7 +27,17 @@ export type CoachProposal =
     }
   | { id: string; type: "correct_sets"; exercise: string; date: string; weightKg: number | null; reps: number | null; rpe: number | null }
   | { id: string; type: "remove_sets"; exercise: string; date: string }
-  | { id: string; type: "set_next_day"; day: string };
+  | { id: string; type: "set_next_day"; day: string }
+  | {
+      id: string;
+      type: "log_cardio";
+      kind: string;
+      date: string;
+      /** null when the lifter didn't note how long. */
+      minutes: number | null;
+      distanceKm: number | null;
+      note: string | null;
+    };
 
 /**
  * Gemini structured-output schema for a personal chat turn. Actions are plain
@@ -60,6 +70,9 @@ Each action is ONE plain text line: the type, then key=value pairs, separated by
 - correct_sets | exercise=<name> | date=<YYYY-MM-DD of the session to fix; omit for their latest> | then only what changes: weight_kg=, reps=, rpe=
 - remove_sets | exercise=<name> | date=<YYYY-MM-DD>
 - set_next_day | day=<${ROT.join("/")}>
+- log_cardio | kind=<Treadmill/Run/Bike/Rowing/Stairs/Walk/…; omit if unsaid> | date=<as above; default today> | minutes=<n; omit if not remembered> | distance_km=<number; convert miles; only if given> | note=<short, only if given>
+  Cardio is a record only: it does not change the rotation or any lifting numbers. Use it for
+  cardio alone ("only did cardio today") or alongside lifting.
 Example: "log_sets | exercise=Bench Press | date=2026-09-03 | weight_kg=82.5 | reps=5 | sets=3 | rpe=8"
 Rules for a whole session described in one message:
 - Different weights for one exercise → one log_sets line per weight, in the order they did them.
@@ -226,6 +239,21 @@ export function sanitizeActions(raw: unknown, history: Record<string, ExerciseDa
         if (w === null && reps === null && rpe === null) continue;
         proposal = { id, type: "correct_sets", exercise: matched, date, weightKg: w, reps, rpe };
       }
+    } else if (a.type === "log_cardio") {
+      const date = readDate(a.date, todayISO);
+      const minutes = a.minutes === undefined ? null : int(a.minutes, 1, 600);
+      if (date === null || (a.minutes !== undefined && minutes === null)) continue;
+      const rawKm = num(a.distance_km);
+      const kind = str(a.kind)?.slice(0, 40) ?? "Cardio";
+      proposal = {
+        id,
+        type: "log_cardio",
+        kind: kind.charAt(0).toUpperCase() + kind.slice(1),
+        date: date === "absent" ? todayISO : date,
+        minutes,
+        distanceKm: rawKm !== null && rawKm > 0 && rawKm <= 300 ? Math.round(rawKm * 100) / 100 : null,
+        note: str(a.note)?.slice(0, 120) ?? null,
+      };
     } else if (a.type === "set_next_day") {
       const day = str(a.day);
       const match = day ? ROT.find((d) => d.toLowerCase() === day.toLowerCase()) : null;
@@ -266,5 +294,7 @@ export function proposalText(p: CoachProposal, units: Units, todayISO: string, t
       return `${done ? "Removed" : "Remove"} ${p.exercise} from ${when(p.date)}.`;
     case "set_next_day":
       return done ? `Next day set to ${p.day}.` : `Set the next training day to ${p.day}.`;
+    case "log_cardio":
+      return `${done ? "Logged" : "Log"} cardio: ${cardioSummary(p)}, ${when(p.date)}.`;
   }
 }
