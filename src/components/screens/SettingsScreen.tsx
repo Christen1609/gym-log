@@ -101,6 +101,55 @@ function CoachProfileCard({ profile, onSave }: { profile: CoachProfile | null; o
   );
 }
 
+const DANGER = "#ff453a";
+
+/** Two-tap account deletion: the first tap explains, the second deletes. */
+function DeleteAccountRow({ onDelete }: { onDelete: () => Promise<void> }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const tap = async () => {
+    if (busy) return;
+    if (!confirming) {
+      setConfirming(true);
+      setError(null);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      // On success the session ends and this row unmounts with the Account section.
+      await onDelete();
+    } catch (err) {
+      console.error("Account deletion failed", err);
+      setError("Couldn't delete your account. Check your connection and try again.");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <button className="row" onClick={tap} disabled={busy} style={{ background: "var(--color-surface)" }}>
+        <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: DANGER }}>
+          {busy ? "Deleting…" : confirming ? "Tap again to delete" : "Delete account"}
+        </span>
+        <Icon name="chev" size={17} style={{ opacity: 0.4 }} />
+      </button>
+      {confirming && !busy && (
+        <div style={{ fontSize: 12.5, lineHeight: 1.45, color: DANGER, padding: "0 14px" }}>
+          Deletes your log, coach chat and account for good. Tap again to delete.
+        </div>
+      )}
+      {error && (
+        <div role="alert" style={{ fontSize: 12.5, lineHeight: 1.45, color: DANGER, padding: "0 14px" }}>
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SettingsScreen({ state }: { state: GymLogState }) {
   return (
     <div className="screen" style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
@@ -172,6 +221,20 @@ export function SettingsScreen({ state }: { state: GymLogState }) {
         <div className="micro" style={{ marginBottom: 9 }}>
           Coach
         </div>
+        <div className="card" style={{ padding: 16, marginBottom: 11, gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 14.5, fontWeight: 600 }}>AI coach</div>
+            <div style={{ fontSize: 11.5, opacity: 0.55 }}>Sends your log and chat to Google Gemini</div>
+          </div>
+          <div className="seg2">
+            <button data-active={state.aiConsent === "granted" ? "true" : "false"} onClick={() => state.setAiConsent("granted")}>
+              On
+            </button>
+            <button data-active={state.aiConsent === "denied" ? "true" : "false"} onClick={() => state.setAiConsent("denied")}>
+              Off
+            </button>
+          </div>
+        </div>
         {state.supabaseEnabled && state.authed && (
           <CoachProfileCard key={state.profile ? "loaded" : "empty"} profile={state.profile} onSave={state.saveCoachProfile} />
         )}
@@ -214,6 +277,29 @@ export function SettingsScreen({ state }: { state: GymLogState }) {
             <Icon name="chev" size={17} style={{ opacity: 0.4 }} />
           </button>
         </div>
+
+        <div className="micro" style={{ margin: "20px 0 9px" }}>
+          About
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <a className="row" href="/privacy" style={{ background: "var(--color-surface)", textDecoration: "none" }}>
+            <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>Privacy policy</span>
+            <Icon name="chev" size={17} style={{ opacity: 0.4 }} />
+          </a>
+          <a className="row" href="/support" style={{ background: "var(--color-surface)", textDecoration: "none" }}>
+            <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>Support</span>
+            <Icon name="chev" size={17} style={{ opacity: 0.4 }} />
+          </a>
+        </div>
+
+        {state.supabaseEnabled && state.authed && (
+          <>
+            <div className="micro" style={{ margin: "20px 0 9px" }}>
+              Account
+            </div>
+            <DeleteAccountRow onDelete={state.deleteAccount} />
+          </>
+        )}
       </div>
     </div>
   );

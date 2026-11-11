@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aiAllowed,
+  readAiConsent,
   cardioBlock,
   cardioSummary,
   collapseHistory,
@@ -233,5 +234,15 @@ describe("nextReminderAt", () => {
   it("with no training yet, uses today 18:00 before 18:00 and tomorrow after", () => {
     expect(nextReminderAt(null, new Date(2026, 10, 11, 9, 0))?.getTime()).toBe(at(2026, 11, 11, 18));
     expect(nextReminderAt(null, new Date(2026, 10, 11, 19, 0))?.getTime()).toBe(at(2026, 11, 12, 18));
+  });
+});
+
+describe("readAiConsent", () => {
+  it("reads only the two stored answers; anything else is unanswered", () => {
+    expect(readAiConsent("granted")).toBe("granted");
+    expect(readAiConsent("denied")).toBe("denied");
+    expect(readAiConsent(null)).toBe(null);
+    expect(readAiConsent("")).toBe(null);
+    expect(readAiConsent("yes")).toBe(null);
   });
 });

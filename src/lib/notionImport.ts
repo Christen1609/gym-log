@@ -28,7 +28,7 @@ export interface ParsedImport {
   flags: string[];
 }
 
-const TOKEN_KEY = "gymlog:notion-token";
+export const TOKEN_KEY = "gymlog:notion-token";
 
 export function loadNotionToken(): string {
   try {

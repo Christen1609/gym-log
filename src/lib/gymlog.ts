@@ -667,6 +667,13 @@ export function aiAllowed(body: unknown): boolean {
   return typeof body === "object" && body !== null && (body as { ai?: unknown }).ai === true;
 }
 
+export type AiConsent = "granted" | "denied" | null;
+
+/** The consent answer as stored in localStorage; anything unexpected counts as unanswered. */
+export function readAiConsent(raw: string | null): AiConsent {
+  return raw === "granted" || raw === "denied" ? raw : null;
+}
+
 /**
  * Next "you're due" nudge: 18:00 local on (last training + gapDays). Never
  * in the past: if that moment has passed, today 18:00 when still ahead,

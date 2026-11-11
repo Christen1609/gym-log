@@ -21,6 +21,8 @@ import {
   cardioSummary,
   daysSinceTraining,
   formatHistDate,
+  readAiConsent,
+  type AiConsent,
   type CardioEntry,
   round1,
   toDisplayWeight,
@@ -31,6 +33,7 @@ import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, getSupabaseClient } from "@/lib/supabase";
 import {
   appendCoachMessage,
+  deleteAccount as deleteAccountData,
   correctSets,
   importHistory,
   loadCardio,
@@ -47,6 +50,7 @@ import {
 } from "@/lib/db";
 import { proposalText, type CoachProposal } from "@/lib/coachActions";
 import {
+  TOKEN_KEY as NOTION_TOKEN_KEY,
   deleteOauthConnection,
   fetchNotionPages,
   fetchOauthConnection,
@@ -115,6 +119,9 @@ interface PersistedState {
 }
 
 const STORAGE_KEY = "gymlog:v1";
+const CONSENT_KEY = "gymlog.aiConsent";
+/** Every key this app writes to localStorage; cleared when the account is deleted. */
+const LOCAL_KEYS = [STORAGE_KEY, NOTION_TOKEN_KEY, CONSENT_KEY];
 
 function loadPersisted(): Partial<PersistedState> {
   if (typeof window === "undefined") return {};
@@ -203,13 +210,20 @@ export function useGymLog() {
   const [coachText, setCoachText] = useState<Record<string, string>>(() => ({ ...COACH }));
   const fetchedCoach = useRef<Set<string>>(new Set());
 
+  // Whether the lifter allowed Gemini to see their log. `null` = not answered
+  // yet. The ref mirrors it for callbacks and the sign-in effect, which run
+  // outside render and must not see a stale value.
+  const [aiConsent, setAiConsentState] = useState<AiConsent>(null);
+  const aiConsentRef = useRef<AiConsent>(null);
+
   const ensureCoachText = useCallback((name: string) => {
+    if (aiConsentRef.current !== "granted") return;
     if (fetchedCoach.current.has(name)) return;
     fetchedCoach.current.add(name);
     fetch("/api/coach", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "exercise", exercise: name }),
+      body: JSON.stringify({ type: "exercise", exercise: name, ai: aiConsentRef.current === "granted" }),
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
@@ -242,6 +256,14 @@ export function useGymLog() {
     if (p.gapsDismissed) setGapsDismissed(p.gapsDismissed);
     const manualToken = loadNotionToken();
     if (manualToken) setNotionConn({ token: manualToken, workspace: null, source: "token" });
+    let consent: AiConsent = null;
+    try {
+      consent = readAiConsent(window.localStorage.getItem(CONSENT_KEY));
+    } catch {
+      /* storage unavailable — treat as unanswered */
+    }
+    aiConsentRef.current = consent;
+    setAiConsentState(consent);
     setHydrated(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -281,6 +303,8 @@ export function useGymLog() {
         // Weekly check-in: the coach speaks first when a week has passed.
         // Fire-and-forget so sign-in never waits on Gemini.
         void (async () => {
+          // Without consent the coach doesn't speak first; nothing is sent.
+          if (aiConsentRef.current !== "granted") return;
           try {
             const now = new Date();
             const latest = findLatestSession(h, now);
@@ -289,6 +313,7 @@ export function useGymLog() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 type: "checkin",
+                ai: true,
                 context: {
                   todayLabel: getTodayInfo(now).label,
                   lastSessionDay: latest?.day,
@@ -412,6 +437,7 @@ export function useGymLog() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "chat",
+            ai: aiConsentRef.current === "granted",
             message: text,
             context: (() => {
               const now = new Date();
@@ -614,6 +640,37 @@ export function useGymLog() {
   const saveCoachProfile = useCallback((p: CoachProfile) => {
     setProfile(p);
     void saveProfile(p).catch((err) => console.error("Profile save failed", err));
+  }, []);
+
+  // Granting clears the judgment cache so exercise judgments load on next view.
+  const setAiConsent = useCallback((v: "granted" | "denied") => {
+    aiConsentRef.current = v;
+    setAiConsentState(v);
+    try {
+      window.localStorage.setItem(CONSENT_KEY, v);
+    } catch {
+      /* storage unavailable — the choice still holds for this visit */
+    }
+    if (v === "granted") fetchedCoach.current.clear();
+  }, []);
+
+  // Deletes the account server-side first; if that fails nothing local is
+  // touched, so the lifter can retry. Then this device forgets everything and
+  // the session is dropped locally.
+  const deleteAccount = useCallback(async () => {
+    await deleteAccountData();
+    for (const key of LOCAL_KEYS) {
+      try {
+        window.localStorage.removeItem(key);
+      } catch {
+        /* storage unavailable — nothing to clear */
+      }
+    }
+    aiConsentRef.current = null;
+    setAiConsentState(null);
+    setNotionConn(null);
+    setNotionPages(null);
+    await getSupabaseClient().auth.signOut({ scope: "local" });
   }, []);
 
   const importReset = useCallback(() => {
@@ -904,6 +961,9 @@ export function useGymLog() {
     saveCoachProfile,
     supabaseEnabled: isSupabaseConfigured,
     signOut: () => void getSupabaseClient().auth.signOut(),
+    deleteAccount,
+    aiConsent,
+    setAiConsent,
     coachText: coachText[activeEx] ?? COACH[activeEx],
     cv,
     openExercise,

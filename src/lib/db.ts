@@ -471,3 +471,12 @@ export async function loadCardio(limit = 30): Promise<CardioEntry[]> {
   if (error) throw error;
   return (data ?? []).map(toCardioEntry);
 }
+
+// ── account ──────────────────────────────────────────────────────────────
+
+/** Deletes the signed-in account and every row it owns (gymlog.delete_my_account). */
+export async function deleteAccount(): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.rpc("delete_my_account");
+  if (error) throw error;
+}

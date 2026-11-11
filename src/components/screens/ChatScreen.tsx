@@ -129,6 +129,31 @@ export function ChatScreen({ state }: { state: GymLogState }) {
         )}
       </div>
 
+      {state.aiConsent === null && (
+        <div className="card" style={{ margin: "0 18px 10px", gap: 10 }}>
+          <div style={{ fontSize: 13.5, lineHeight: 1.45 }}>
+            The coach uses Google Gemini. To answer, it sends your training log, profile (including injuries you list) and this
+            chat to Google. Not medical advice.
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-primary" style={{ flex: 1, minHeight: 38 }} onClick={() => state.setAiConsent("granted")}>
+              Allow
+            </button>
+            <button className="btn btn-secondary" style={{ flex: 1, minHeight: 38 }} onClick={() => state.setAiConsent("denied")}>
+              Not now
+            </button>
+          </div>
+          <a href="/privacy" style={{ fontSize: 12, color: "var(--color-accent)", alignSelf: "flex-start" }}>
+            Privacy policy
+          </a>
+        </div>
+      )}
+      {state.aiConsent === "denied" && (
+        <div style={{ margin: "0 18px 10px", fontSize: 12, opacity: 0.6 }}>
+          Coach AI is off — answers use built-in guidance. Turn it on in Settings.
+        </div>
+      )}
+
       <div
         style={{
           flex: "none",
