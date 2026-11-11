@@ -49,3 +49,9 @@ supabase/.temp/
 
 # superpowers execution scratch
 .superpowers/
+
+# Capacitor iOS (ios/ itself is committed)
+ios/App/Pods
+ios/App/App/public
+ios/DerivedData
+xcuserdata
