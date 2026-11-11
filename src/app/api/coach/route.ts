@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { judgeChat, judgeExercise, weeklyCheckin } from "@/lib/coach";
 import { hasHistory, loadCoachData, type CoachUserData } from "@/lib/coachData";
 import { supabaseFromRequest, type RequestSupabase } from "@/lib/supabaseServer";
-import type { ChatContext } from "@/lib/gymlog";
+import { aiAllowed, fallbackReply, type ChatContext } from "@/lib/gymlog";
 
 // With a signed-in user (auth cookies) the coach runs on THEIR data and the
 // conversation persists; anonymously it falls back to the seeded demo numbers,
@@ -36,18 +36,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  const user = await userData(req).catch((err) => {
-    console.error("Coach data load failed", err);
-    return null;
-  });
+  // No consent, no Gemini call and no reads or writes of the lifter's data.
+  const allowed = aiAllowed(body);
+
+  const user = allowed
+    ? await userData(req).catch((err) => {
+        console.error("Coach data load failed", err);
+        return null;
+      })
+    : null;
 
   if (body.type === "exercise" && typeof body.exercise === "string") {
+    if (!allowed) return NextResponse.json({ text: null });
     const text = await judgeExercise(body.exercise, user?.data);
     return NextResponse.json({ text });
   }
 
   if (body.type === "chat" && typeof body.message === "string") {
     const context = readContext(body.context);
+    if (!allowed) return NextResponse.json({ text: fallbackReply(body.message, context), proposals: [] });
     const result = await judgeChat(body.message, context, user?.data);
 
     if (user) {
@@ -83,6 +90,7 @@ export async function POST(req: NextRequest) {
 
   // The app asks on sign-in; the coach speaks first when a week has passed.
   if (body.type === "checkin") {
+    if (!allowed) return NextResponse.json({ text: null });
     if (!user || !hasHistory(user.data)) return NextResponse.json({ text: null });
 
     const last = user.data.lastCheckinAt ? new Date(user.data.lastCheckinAt).getTime() : 0;

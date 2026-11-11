@@ -658,3 +658,32 @@ export function reminderCopy(args: {
       : `Log a set and the rotation starts tracking itself. ${today}`;
   return { gap, detail };
 }
+
+// ── consent + reminders ─────────────────────────────────────────────────
+// The coach sends the log to Gemini only when the lifter has said yes; the
+// server treats anything other than an explicit `ai: true` as no.
+
+export function aiAllowed(body: unknown): boolean {
+  return typeof body === "object" && body !== null && (body as { ai?: unknown }).ai === true;
+}
+
+/**
+ * Next "you're due" nudge: 18:00 local on (last training + gapDays). Never
+ * in the past: if that moment has passed, today 18:00 when still ahead,
+ * otherwise tomorrow 18:00. With no training yet the same rule applies to today.
+ */
+export function nextReminderAt(lastTrainingISO: string | null, now: Date, gapDays = 2): Date | null {
+  const at18 = (dayOffset: number, base?: Date) => {
+    const d = base ?? now;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + dayOffset, 18, 0);
+  };
+  if (lastTrainingISO) {
+    const m = lastTrainingISO.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) {
+      const due = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + gapDays, 18, 0);
+      if (due.getTime() > now.getTime()) return due;
+    }
+  }
+  const today = at18(0);
+  return today.getTime() > now.getTime() ? today : at18(1);
+}

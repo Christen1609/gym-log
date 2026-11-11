@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  aiAllowed,
   cardioBlock,
   cardioSummary,
   collapseHistory,
   daysSinceTraining,
   entryE1rm,
   loadSummary,
+  nextReminderAt,
   readOut,
   reminderCopy,
   toCardioEntry,
@@ -203,5 +205,33 @@ describe("reminderCopy", () => {
     expect(reminderCopy({ days: null, lastLiftDay: null, lastLiftDate: null, dayTitle: "Chest day" }).gap).toBe(
       "Nothing is in the log yet."
     );
+  });
+});
+
+describe("aiAllowed", () => {
+  it("allows only an explicit ai: true flag", () => {
+    expect(aiAllowed({ ai: true })).toBe(true);
+    expect(aiAllowed({ ai: "true" })).toBe(false);
+    expect(aiAllowed({})).toBe(false);
+    expect(aiAllowed(null)).toBe(false);
+    expect(aiAllowed("x")).toBe(false);
+  });
+});
+
+describe("nextReminderAt", () => {
+  const at = (y: number, m: number, d: number, h = 0, min = 0) => new Date(y, m - 1, d, h, min).getTime();
+
+  it("schedules 18:00 local on last training plus the gap, when that is still ahead", () => {
+    expect(nextReminderAt("2026-11-10", new Date(2026, 10, 11, 9, 0))?.getTime()).toBe(at(2026, 11, 12, 18));
+  });
+
+  it("falls back to today 18:00 when the due day is already past, and tomorrow once 18:00 has passed", () => {
+    expect(nextReminderAt("2026-11-01", new Date(2026, 10, 11, 9, 0))?.getTime()).toBe(at(2026, 11, 11, 18));
+    expect(nextReminderAt("2026-11-01", new Date(2026, 10, 11, 19, 0))?.getTime()).toBe(at(2026, 11, 12, 18));
+  });
+
+  it("with no training yet, uses today 18:00 before 18:00 and tomorrow after", () => {
+    expect(nextReminderAt(null, new Date(2026, 10, 11, 9, 0))?.getTime()).toBe(at(2026, 11, 11, 18));
+    expect(nextReminderAt(null, new Date(2026, 10, 11, 19, 0))?.getTime()).toBe(at(2026, 11, 12, 18));
   });
 });
