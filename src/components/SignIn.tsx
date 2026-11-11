@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabase";
+import { isNativeApp } from "@/lib/native";
 
 export function SignIn({ theme }: { theme: "light" | "dark" }) {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -10,6 +12,36 @@ export function SignIn({ theme }: { theme: "light" | "dark" }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Google sign-in is hidden in the iOS shell; email sign-in stays. Read after
+  // mount so the server render and first client render agree.
+  const [native, setNative] = useState(false);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setNative(isNativeApp());
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const sendResetLink = async () => {
+    setError(null);
+    setNotice(null);
+    if (!email.trim()) {
+      setError("Enter your email first.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error } = await getSupabaseClient().auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: window.location.origin,
+      });
+      if (error) throw error;
+      setNotice("Check your email for a reset link.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't send the reset link.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,20 +158,35 @@ export function SignIn({ theme }: { theme: "light" | "dark" }) {
           </button>
         </form>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "16px 0" }}>
-          <span style={{ flex: 1, height: 1, background: "var(--color-divider)" }} />
-          <span className="micro">or</span>
-          <span style={{ flex: 1, height: 1, background: "var(--color-divider)" }} />
-        </div>
+        {mode === "signin" && (
+          <button
+            className="btn"
+            onClick={sendResetLink}
+            disabled={busy}
+            style={{ marginTop: 10, fontSize: 13, opacity: 0.75, background: "none", border: "none", alignSelf: "flex-start" }}
+          >
+            Forgot password?
+          </button>
+        )}
 
-        <button
-          className="btn btn-secondary btn-block"
-          onClick={signInWithGoogle}
-          disabled={busy}
-          style={{ minHeight: 50 }}
-        >
-          Continue with Google
-        </button>
+        {!native && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "16px 0" }}>
+              <span style={{ flex: 1, height: 1, background: "var(--color-divider)" }} />
+              <span className="micro">or</span>
+              <span style={{ flex: 1, height: 1, background: "var(--color-divider)" }} />
+            </div>
+
+            <button
+              className="btn btn-secondary btn-block"
+              onClick={signInWithGoogle}
+              disabled={busy}
+              style={{ minHeight: 50 }}
+            >
+              Continue with Google
+            </button>
+          </>
+        )}
 
         <button
           className="btn"
@@ -164,6 +211,16 @@ export function SignIn({ theme }: { theme: "light" | "dark" }) {
             {error}
           </p>
         )}
+
+        <div style={{ marginTop: 28, display: "flex", gap: 8, justifyContent: "center", fontSize: 12, opacity: 0.6 }}>
+          <Link href="/privacy" style={{ color: "inherit" }}>
+            Privacy
+          </Link>
+          <span aria-hidden="true">·</span>
+          <Link href="/support" style={{ color: "inherit" }}>
+            Support
+          </Link>
+        </div>
       </div>
     </div>
   );

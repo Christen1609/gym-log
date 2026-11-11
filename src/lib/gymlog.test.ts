@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aiAllowed,
+  isoDaysAgo,
   readAiConsent,
   cardioBlock,
   cardioSummary,
@@ -219,8 +220,17 @@ describe("aiAllowed", () => {
   });
 });
 
+describe("isoDaysAgo", () => {
+  it("steps back whole calendar days across month and year boundaries", () => {
+    expect(isoDaysAgo("2026-11-11", 0)).toBe("2026-11-11");
+    expect(isoDaysAgo("2026-11-11", 3)).toBe("2026-11-08");
+    expect(isoDaysAgo("2026-03-01", 1)).toBe("2026-02-28");
+    expect(isoDaysAgo("2026-01-02", 3)).toBe("2025-12-30");
+  });
+});
+
 describe("nextReminderAt", () => {
-  const at = (y: number, m: number, d: number, h = 0, min = 0) => new Date(y, m - 1, d, h, min).getTime();
+  const at =(y: number, m: number, d: number, h = 0, min = 0) => new Date(y, m - 1, d, h, min).getTime();
 
   it("schedules 18:00 local on last training plus the gap, when that is still ahead", () => {
     expect(nextReminderAt("2026-11-10", new Date(2026, 10, 11, 9, 0))?.getTime()).toBe(at(2026, 11, 12, 18));

@@ -20,6 +20,8 @@ import {
   unnotedGaps,
   cardioSummary,
   daysSinceTraining,
+  isoDaysAgo,
+  nextReminderAt,
   formatHistDate,
   readAiConsent,
   type AiConsent,
@@ -49,6 +51,13 @@ import {
   type CoachProfile,
 } from "@/lib/db";
 import { proposalText, type CoachProposal } from "@/lib/coachActions";
+import { isNativeApp } from "@/lib/native";
+import {
+  cancelReminder,
+  requestReminderPermission,
+  scheduleReminder,
+  tapHaptic,
+} from "@/lib/nativeExtras";
 import {
   TOKEN_KEY as NOTION_TOKEN_KEY,
   deleteOauthConnection,
@@ -120,8 +129,9 @@ interface PersistedState {
 
 const STORAGE_KEY = "gymlog:v1";
 const CONSENT_KEY = "gymlog.aiConsent";
+const REMINDERS_KEY = "gymlog.reminders";
 /** Every key this app writes to localStorage; cleared when the account is deleted. */
-const LOCAL_KEYS = [STORAGE_KEY, NOTION_TOKEN_KEY, CONSENT_KEY];
+const LOCAL_KEYS = [STORAGE_KEY, NOTION_TOKEN_KEY, CONSENT_KEY, REMINDERS_KEY];
 
 function loadPersisted(): Partial<PersistedState> {
   if (typeof window === "undefined") return {};
@@ -199,6 +209,13 @@ export function useGymLog() {
   // UI behind sign-in and `history` is the user's real data. Without it both
   // stay at their zero-config defaults and the seeded history is used instead.
   const [authed, setAuthed] = useState<boolean | null>(isSupabaseConfigured ? null : true);
+  // Set when the lifter opened a password-reset link: the app shows the
+  // set-a-new-password screen until finishRecovery succeeds.
+  const [recovering, setRecovering] = useState(false);
+  // Native-only: the iOS shell's daily reminder. Off until the lifter turns it on.
+  const [reminders, setRemindersOn] = useState(false);
+  // Computed after mount (see the hydration effect) so server and first client render match.
+  const [nativeApp, setNativeApp] = useState(false);
   const [history, setHistory] = useState<Record<string, ExerciseData>>(EX);
   const [syncing, setSyncing] = useState(false);
   const [profile, setProfile] = useState<CoachProfile | null>(null);
@@ -264,6 +281,12 @@ export function useGymLog() {
     }
     aiConsentRef.current = consent;
     setAiConsentState(consent);
+    try {
+      setRemindersOn(window.localStorage.getItem(REMINDERS_KEY) === "on");
+    } catch {
+      /* storage unavailable — reminders stay off */
+    }
+    setNativeApp(isNativeApp());
     setHydrated(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -340,9 +363,11 @@ export function useGymLog() {
     supabase.auth
       .getSession()
       .then(({ data }: { data: { session: Session | null } }) => void sync(Boolean(data.session)));
-    const { data: sub } = supabase.auth.onAuthStateChange(
-      (_event: AuthChangeEvent, session: Session | null) => void sync(Boolean(session))
-    );
+    const { data: sub } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+      // A password-reset link signs the lifter in, then asks them to set a new password.
+      if (event === "PASSWORD_RECOVERY") setRecovering(true);
+      void sync(Boolean(session));
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
@@ -487,6 +512,7 @@ export function useGymLog() {
 
   const confirmSave = useCallback(() => {
     if (!parsed) return;
+    void tapHaptic();
     setLogged((l) =>
       l.concat([
         {
@@ -670,7 +696,28 @@ export function useGymLog() {
     setAiConsentState(null);
     setNotionConn(null);
     setNotionPages(null);
+    setRemindersOn(false);
+    await cancelReminder();
     await getSupabaseClient().auth.signOut({ scope: "local" });
+  }, []);
+
+  // Sets the new password on the recovery session; the app then carries on as normal.
+  const finishRecovery = useCallback(async (password: string) => {
+    const { error } = await getSupabaseClient().auth.updateUser({ password });
+    if (error) throw error;
+    setRecovering(false);
+  }, []);
+
+  // Turning reminders on asks for permission first; a refusal leaves them off.
+  const setReminders = useCallback(async (on: boolean) => {
+    const next = on ? await requestReminderPermission() : false;
+    if (!next) await cancelReminder();
+    setRemindersOn(next);
+    try {
+      window.localStorage.setItem(REMINDERS_KEY, next ? "on" : "off");
+    } catch {
+      /* storage unavailable — the choice still holds for this visit */
+    }
   }, []);
 
   const importReset = useCallback(() => {
@@ -731,6 +778,18 @@ export function useGymLog() {
   // Cardio counts as training here (and only here — it never moves the rotation).
   const daysSinceLast = daysSinceTraining(resolved.daysSinceLast, cardio, todayInfo.iso || localISODate());
   const workoutUnlogged = daysSinceLast === null || daysSinceLast >= 1;
+
+  const dayTitle = `${currentNextDay} day`;
+  // The calendar date of the last training, reconstructed from how long ago it was.
+  const lastTrainingISO = daysSinceLast === null || !todayInfo.iso ? null : isoDaysAgo(todayInfo.iso, daysSinceLast);
+
+  // Keeps the one pending reminder pointed at the next due moment. Re-runs when
+  // the last training date moves (a logged session) or the rotation day changes.
+  useEffect(() => {
+    if (!reminders || !nativeApp) return;
+    const at = nextReminderAt(lastTrainingISO, new Date());
+    if (at) void scheduleReminder(at, dayTitle);
+  }, [reminders, nativeApp, lastTrainingISO, dayTitle]);
 
   const pickDay = useCallback(
     (d: string) => {
@@ -814,6 +873,7 @@ export function useGymLog() {
           }
 
           setProposalStatus(msgId, proposalId, "done");
+          void tapHaptic();
           const receipt = proposalText(p, units, today, "done");
           setMsgs((m) => m.concat({ id: msgIdRef.current++, who: "coach", text: receipt }));
           if (isSupabaseConfigured && authed) {
@@ -921,7 +981,7 @@ export function useGymLog() {
     setRpeAsk,
     nextDay: currentNextDay,
     rotation,
-    dayTitle: `${currentNextDay} day`,
+    dayTitle,
     dayIsAuto: !overrideActive,
     clearDayOverride: () => {
       setDayOverride(null);
@@ -956,6 +1016,11 @@ export function useGymLog() {
     exGroup: history[activeEx]?.group ?? EX[activeEx].group,
     readOutData: ro,
     authed,
+    recovering,
+    finishRecovery,
+    reminders,
+    setReminders,
+    nativeApp,
     syncing,
     profile,
     saveCoachProfile,

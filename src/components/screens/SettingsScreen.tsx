@@ -204,6 +204,24 @@ export function SettingsScreen({ state }: { state: GymLogState }) {
             </button>
           </div>
         </div>
+        {state.nativeApp && (
+          <div className="card" style={{ padding: 16, marginBottom: 11, gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 14.5, fontWeight: 600 }}>Reminders</div>
+              <div style={{ fontSize: 11.5, opacity: 0.55 }}>
+                {"A nudge at 6pm when you're two days past your last session."}
+              </div>
+            </div>
+            <div className="seg2">
+              <button data-active={state.reminders ? "true" : "false"} onClick={() => void state.setReminders(true)}>
+                On
+              </button>
+              <button data-active={state.reminders ? "false" : "true"} onClick={() => void state.setReminders(false)}>
+                Off
+              </button>
+            </div>
+          </div>
+        )}
         <div className="card" style={{ padding: 16, marginBottom: 20, gap: 9 }}>
           <div>
             <div style={{ fontSize: 14.5, fontWeight: 600 }}>Next in rotation</div>

@@ -10,6 +10,7 @@ import { ImportScreen } from "@/components/screens/ImportScreen";
 import { ProgressScreen } from "@/components/screens/ProgressScreen";
 import { SettingsScreen } from "@/components/screens/SettingsScreen";
 import { TodayScreen } from "@/components/screens/TodayScreen";
+import { SetPassword } from "@/components/SetPassword";
 import { SignIn } from "@/components/SignIn";
 import { useGymLog } from "@/lib/useGymLog";
 
@@ -21,6 +22,7 @@ export default function Home() {
   // screen at an already-signed-in user.
   if (state.authed === null) return <div className="app-shell" data-theme={state.theme} />;
   if (!state.authed) return <SignIn theme={state.theme} />;
+  if (state.recovering) return <SetPassword theme={state.theme} onSave={state.finishRecovery} />;
 
   return (
     <div className="app-shell" data-theme={state.theme}>

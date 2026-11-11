@@ -694,3 +694,9 @@ export function nextReminderAt(lastTrainingISO: string | null, now: Date, gapDay
   const today = at18(0);
   return today.getTime() > now.getTime() ? today : at18(1);
 }
+
+/** The ISO date (yyyy-mm-dd) `days` calendar days before `todayISO`. UTC arithmetic, so DST never shifts it. */
+export function isoDaysAgo(todayISO: string, days: number): string {
+  const [y, m, d] = todayISO.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d - days)).toISOString().slice(0, 10);
+}
