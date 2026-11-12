@@ -128,3 +128,31 @@ Gym Log is a workout logger. The iOS app is a Capacitor shell that loads https:/
 - [ ] Confirm `GEMINI_API_KEY` is set in Vercel production.
 - [ ] Confirm the Supabase Auth URL configuration includes the site URL (https://gym-log-eight.vercel.app) so password reset links work.
 - [ ] Run `npm run cap:sync` after any Capacitor config change.
+
+## Building without a Mac (GitHub Actions)
+
+You do not need a Mac. GitHub's free macOS machines (the workflow in `.github/workflows/ios.yml`) do the Mac work.
+
+**What runs on every push** to `main` or `feat/app-store-ready` (when iOS, app code or package files change): the workflow installs the dependencies, syncs Capacitor, adds the home-screen widget to the Xcode project, and compiles the iOS app for the simulator. It signs nothing and uploads nothing; it only tells you (green tick or red cross on GitHub) whether the iOS app still builds. If it fails, open the run and download the `xcodebuild-log` file.
+
+**One-time setup to get builds onto your iPhone via TestFlight**
+
+1. Enroll in the Apple Developer Program (developer.apple.com/programs, paid, yearly).
+2. In App Store Connect go to Users and Access, then Integrations, then App Store Connect API. Create a key with the **App Manager** role. Download the `.p8` file straight away; Apple only lets you download it once.
+3. Write down the **Key ID** (shown next to the key) and the **Issuer ID** (shown at the top of that page).
+4. Find your **Team ID** at developer.apple.com under Account, then Membership details.
+5. Register the app identifiers. Automatic signing in the workflow will usually create and fix these for you, but doing it by hand avoids surprises. At developer.apple.com, Certificates, Identifiers & Profiles: add an App ID with bundle id `com.christen1609.gymlog` and enable **HealthKit** and **App Groups**; create the App Group `group.com.christen1609.gymlog` and tick it on the App ID. The widget uses `com.christen1609.gymlog.widget` and needs the same App Group; automatic signing normally registers it.
+6. In App Store Connect create the app record (My Apps, plus button) with that bundle id, if you have not already.
+7. On GitHub open the repo, Settings, Secrets and variables, Actions, and add four repository secrets:
+   - `APPLE_TEAM_ID`: the Team ID.
+   - `ASC_KEY_ID`: the Key ID.
+   - `ASC_ISSUER_ID`: the Issuer ID.
+   - `ASC_KEY_P8`: the `.p8` file as base64. In Git Bash run `base64 -w0 AuthKey_XXXX.p8` and paste the single long line it prints.
+
+**Each time you want a build on your phone**
+
+1. On GitHub open the Actions tab, pick the **iOS** workflow, click **Run workflow**, choose the branch, tick **upload**, and run it.
+2. It compiles, signs, and uploads to App Store Connect (roughly 15 to 30 minutes). The build number is the run number, so each run is unique.
+3. After Apple finishes processing (a few minutes to an hour; you get an email), install the **TestFlight** app on your iPhone, sign in with your Apple ID, and install the build. Add yourself under TestFlight, Internal Testing, in App Store Connect if it does not appear.
+
+**Screenshots:** you can take them on your iPhone from the TestFlight build. The required 6.9" size comes from a Pro Max model; other iPhones give a different size. If you do not have a Pro Max, a later workflow can capture simulator screenshots at the right size on a GitHub Mac.
