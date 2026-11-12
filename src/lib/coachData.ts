@@ -4,14 +4,8 @@
 // rows.
 
 import "server-only";
-import {
-  collapseHistory,
-  toCardioEntry,
-  type CardioEntry,
-  type ExerciseData,
-  type HistoryExerciseRow,
-  type HistorySetRow,
-} from "@/lib/gymlog";
+import { toCardioEntry, type CardioEntry, type ExerciseData } from "@/lib/gymlog";
+import { fetchHistory } from "@/lib/trainingLog";
 import type { RequestSupabase } from "@/lib/supabaseServer";
 
 export interface CoachProfileRow {
@@ -41,12 +35,9 @@ export interface CoachUserData {
 export async function loadCoachData(supa: RequestSupabase): Promise<CoachUserData> {
   const client = supa.client;
 
-  const [exercisesRes, setsRes, profileRes, notesRes, recentRes, checkinRes, cardioRes] = await Promise.all([
-    client.from("exercises").select("id, name, muscle_group, is_compound"),
-    client
-      .from("sets")
-      .select("exercise_id, session_id, set_no, weight, reps, rpe, felt_note, sessions!inner(date)")
-      .order("set_no"),
+  const [history, profileRes, notesRes, recentRes, checkinRes, cardioRes] = await Promise.all([
+    // A failed history read coaches on an empty log rather than failing the request.
+    fetchHistory(client).catch((): Record<string, ExerciseData> => ({})),
     client.from("profiles").select("goal, experience, days_per_week, injuries, preferences").maybeSingle(),
     client.from("coach_notes").select("id, note, created_at").eq("status", "active").order("created_at"),
     client
@@ -64,12 +55,6 @@ export async function loadCoachData(supa: RequestSupabase): Promise<CoachUserDat
       .maybeSingle(),
     client.from("cardio").select("date, kind, minutes, distance_km, note").order("date", { ascending: false }).limit(14),
   ]);
-
-  type JoinedRow = Omit<HistorySetRow, "date"> & { sessions: { date: string } };
-  const history = collapseHistory(
-    (exercisesRes.data ?? []) as unknown as HistoryExerciseRow[],
-    ((setsRes.data ?? []) as unknown as JoinedRow[]).map((row) => ({ ...row, date: row.sessions.date }))
-  );
 
   return {
     history,

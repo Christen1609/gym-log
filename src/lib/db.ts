@@ -10,18 +10,16 @@
 import {
   EX,
   ROT,
-  collapseHistory,
   localISODate,
   muscleFromGroup,
   type ExerciseData,
-  type HistoryExerciseRow,
-  type HistorySetRow,
   type ParsedSet,
   type SetRow,
   toCardioEntry,
   type CardioEntry,
 } from "@/lib/gymlog";
 import { getSupabaseClient } from "@/lib/supabase";
+import { expandSetRows, fetchHistory } from "@/lib/trainingLog";
 
 /**
  * Seeds exercises, the rotation, and the demo session history — but only into
@@ -95,22 +93,19 @@ export async function seedIfEmpty(): Promise<void> {
 
   // The seed records one line per exercise per session with a set count; expand
   // it into individual set rows so the schema holds real per-set data.
-  const setRows: Record<string, unknown>[] = [];
-  for (const [date, entries] of byDate) {
-    for (const { exercise, set } of entries) {
-      for (let n = 1; n <= set.sets; n++) {
-        setRows.push({
-          session_id: sessionIdByDate.get(date),
-          exercise_id: idByName.get(exercise),
-          set_no: n,
-          weight: set.w,
-          reps: set.reps,
-          rpe: set.rpe,
-          felt_note: n === set.sets ? set.note || null : null,
-        });
-      }
-    }
-  }
+  const setRows = [...byDate].flatMap(([date, entries]) =>
+    entries.flatMap(({ exercise, set }) =>
+      expandSetRows({
+        sessionId: sessionIdByDate.get(date)!,
+        exerciseId: idByName.get(exercise)!,
+        count: set.sets,
+        weight: set.w,
+        reps: set.reps,
+        rpe: set.rpe,
+        note: set.note,
+      })
+    )
+  );
   const { error: setsError } = await supabase.from("sets").insert(setRows);
   if (setsError) throw setsError;
 }
@@ -120,25 +115,8 @@ export async function seedIfEmpty(): Promise<void> {
  * computes from: one entry per exercise per session, carrying that session's
  * top set and its set count.
  */
-export async function loadHistory(): Promise<Record<string, ExerciseData>> {
-  const supabase = getSupabaseClient();
-
-  const { data: exercises, error: exError } = await supabase
-    .from("exercises")
-    .select("id, name, muscle_group, is_compound");
-  if (exError) throw exError;
-
-  const { data: sets, error: setsError } = await supabase
-    .from("sets")
-    .select("exercise_id, session_id, set_no, weight, reps, rpe, felt_note, sessions!inner(date)")
-    .order("set_no");
-  if (setsError) throw setsError;
-
-  type JoinedRow = Omit<HistorySetRow, "date"> & { sessions: { date: string } };
-  return collapseHistory(
-    (exercises ?? []) as unknown as HistoryExerciseRow[],
-    ((sets ?? []) as unknown as JoinedRow[]).map((row) => ({ ...row, date: row.sessions.date }))
-  );
+export function loadHistory(): Promise<Record<string, ExerciseData>> {
+  return fetchHistory(getSupabaseClient());
 }
 
 // ── coach personalisation ────────────────────────────────────────────────
@@ -253,24 +231,21 @@ export async function importHistory(
   const sessionIdByDate = new Map<string, string>();
   for (const row of createdSessions ?? []) sessionIdByDate.set(row.date as string, row.id as string);
 
-  const setRows: Record<string, unknown>[] = [];
-  for (const s of fresh) {
-    for (const set of s.sets) {
+  const setRows = fresh.flatMap((s) =>
+    s.sets.flatMap((set) => {
       const exerciseId = idByName.get(set.exercise.toLowerCase());
-      if (!exerciseId) continue;
-      for (let n = 1; n <= set.count; n++) {
-        setRows.push({
-          session_id: sessionIdByDate.get(s.date),
-          exercise_id: exerciseId,
-          set_no: n,
-          weight: set.weight,
-          reps: set.reps,
-          rpe: set.rpe,
-          felt_note: n === set.count ? set.note : null,
-        });
-      }
-    }
-  }
+      if (!exerciseId) return [];
+      return expandSetRows({
+        sessionId: sessionIdByDate.get(s.date)!,
+        exerciseId,
+        count: set.count,
+        weight: set.weight,
+        reps: set.reps,
+        rpe: set.rpe,
+        note: set.note,
+      });
+    })
+  );
   const { error: setsError } = await supabase.from("sets").insert(setRows);
   if (setsError) throw setsError;
 
@@ -350,15 +325,16 @@ export async function logSets(input: LogSetsInput): Promise<void> {
   if (lastError) throw lastError;
   const startAt = ((last?.set_no as number) ?? 0) + 1;
 
-  const rows = Array.from({ length: input.sets }, (_, i) => ({
-    session_id: sessionId,
-    exercise_id: exercise.id,
-    set_no: startAt + i,
+  const rows = expandSetRows({
+    sessionId,
+    exerciseId: exercise.id,
+    count: input.sets,
     weight: input.weightKg,
     reps: input.reps,
     rpe: input.rpe,
-    felt_note: i === input.sets - 1 ? input.note || null : null,
-  }));
+    note: input.note,
+    startAt,
+  });
 
   const { error: insertError } = await supabase.from("sets").insert(rows);
   if (insertError) throw insertError;
