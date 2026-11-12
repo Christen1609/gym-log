@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseWorkoutText, type ImportResult } from "@/lib/importParse";
+import { aiAllowed } from "@/lib/gymlog";
 
 // Notion proxy. The browser can't call api.notion.com directly (CORS), and the
 // integration token shouldn't travel further than it must — so the client sends
@@ -143,12 +144,12 @@ export async function POST(req: NextRequest) {
       if (!text.trim()) {
         return NextResponse.json({ error: "That page has no text to read." }, { status: 422 });
       }
-      const result: ImportResult = await parseWorkoutText(text, today);
+      const result: ImportResult = await parseWorkoutText(text, today, aiAllowed(body));
       return NextResponse.json({ result });
     }
 
     if (body.action === "parse" && typeof body.text === "string" && body.text.trim()) {
-      const result: ImportResult = await parseWorkoutText(body.text, today);
+      const result: ImportResult = await parseWorkoutText(body.text, today, aiAllowed(body));
       return NextResponse.json({ result });
     }
   } catch (err) {

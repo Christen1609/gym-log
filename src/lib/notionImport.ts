@@ -3,7 +3,7 @@
 // Client side of the Notion import: token storage (this device only) and the
 // calls to /api/notion, which proxies Notion and parses the log server-side.
 
-import { localISODate } from "@/lib/gymlog";
+import { localISODate, readAiConsent } from "@/lib/gymlog";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 import type { HistoryImportExercise, HistoryImportSession } from "@/lib/db";
 
@@ -75,11 +75,20 @@ export async function deleteOauthConnection(): Promise<void> {
   await supabase.from("notion_connections").delete().eq("user_id", data.user.id);
 }
 
+function aiConsentGranted(): boolean {
+  try {
+    return readAiConsent(window.localStorage.getItem("gymlog.aiConsent")) === "granted";
+  } catch {
+    return false;
+  }
+}
+
 async function call<T>(body: Record<string, unknown>): Promise<T> {
   const res = await fetch("/api/notion", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    // Import text only goes to Gemini when the lifter allowed the AI coach.
+    body: JSON.stringify({ ...body, ai: aiConsentGranted() }),
   });
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error(data?.error ?? "Request failed");

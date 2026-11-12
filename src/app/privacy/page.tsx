@@ -67,7 +67,8 @@ export default function PrivacyPage() {
         <li>
           <strong>Google Gemini</strong> receives data only when you allow the AI coach in the app. Until you allow it,
           nothing is sent to Gemini. When you allow it, the coach sends your training log, your profile (including
-          injuries you list) and the chat to Google to write its answer.
+          injuries you list) and the chat to Google to write its answer. When you import a workout log, its text is
+          also sent to Google to read it; without your permission the app reads it with its built-in parser instead.
         </li>
         <li>
           <strong>Notion</strong> is contacted only if you connect it. Your Notion connection is stored with your
