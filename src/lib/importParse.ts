@@ -4,6 +4,7 @@
 // deterministic line parser, which only recognises exercises in ALIAS.
 
 import "server-only";
+import { generate } from "@/lib/gemini";
 import { ALIAS, localISODate, parseDateLabel, parseLog } from "@/lib/gymlog";
 
 export interface ImportSet {
@@ -100,33 +101,9 @@ const RESPONSE_SCHEMA = {
 };
 
 async function parseWithGemini(text: string, today: string): Promise<ImportResult | null> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return null;
-
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
+  const raw = await generate({ prompt: PARSE_PROMPT(text, today), schema: RESPONSE_SCHEMA, temperature: 0, maxTokens: 16384, label: "Gemini parse" });
+  if (raw === null) return null;
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: PARSE_PROMPT(text, today) }] }],
-        generationConfig: {
-          temperature: 0,
-          maxOutputTokens: 16384,
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
-        },
-      }),
-    });
-    if (!res.ok) {
-      console.error("Gemini parse failed", res.status, await res.text());
-      return null;
-    }
-    const data = await res.json();
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (typeof raw !== "string") return null;
     return sanitize(JSON.parse(raw));
   } catch (err) {
     console.error("Gemini parse errored", err);

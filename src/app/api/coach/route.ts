@@ -3,12 +3,11 @@ import { judgeChat, judgeExercise, weeklyCheckin } from "@/lib/coach";
 import { hasHistory, loadCoachData, type CoachUserData } from "@/lib/coachData";
 import { supabaseFromRequest, type RequestSupabase } from "@/lib/supabaseServer";
 import { aiAllowed, fallbackReply, type ChatContext } from "@/lib/gymlog";
+import { checkinDue, noteWrites, saveCoachLine, saveTurn } from "@/lib/coachMemory";
 
 // With a signed-in user (auth cookies) the coach runs on THEIR data and the
 // conversation persists; anonymously it falls back to the seeded demo numbers,
 // so the zero-config app keeps working.
-
-const CHECKIN_EVERY_DAYS = 7;
 
 function readContext(value: unknown): ChatContext {
   if (!value || typeof value !== "object") return {};
@@ -60,23 +59,7 @@ export async function POST(req: NextRequest) {
     if (user) {
       const client = user.supa.client;
       // Persistence is best-effort: a failed write must never eat the reply.
-      // Explicit timestamps: one insert would stamp both rows with the same
-      // created_at and the reload could show the reply before the question.
-      const now = Date.now();
-      const writes: PromiseLike<unknown>[] = [
-        client.from("coach_messages").insert([
-          { who: "user", text: body.message, created_at: new Date(now).toISOString() },
-          { who: "coach", text: result.text, created_at: new Date(now + 1).toISOString() },
-        ]),
-      ];
-      if (result.addNote) writes.push(client.from("coach_notes").insert({ note: result.addNote }));
-      if (result.resolveNoteIds.length)
-        writes.push(
-          client
-            .from("coach_notes")
-            .update({ status: "resolved", updated_at: new Date().toISOString() })
-            .in("id", result.resolveNoteIds)
-        );
+      const writes = [saveTurn(client, body.message, result.text), ...noteWrites(client, result.addNote, result.resolveNoteIds)];
       const results = await Promise.allSettled(writes);
       for (const r of results) {
         if (r.status === "rejected") console.error("Coach persistence failed", r.reason);
@@ -93,15 +76,12 @@ export async function POST(req: NextRequest) {
     if (!allowed) return NextResponse.json({ text: null });
     if (!user || !hasHistory(user.data)) return NextResponse.json({ text: null });
 
-    const last = user.data.lastCheckinAt ? new Date(user.data.lastCheckinAt).getTime() : 0;
-    const due = Date.now() - last > CHECKIN_EVERY_DAYS * 24 * 60 * 60 * 1000;
-    if (!due) return NextResponse.json({ text: null });
+    if (!checkinDue(user.data.lastCheckinAt)) return NextResponse.json({ text: null });
 
     const text = await weeklyCheckin(user.data, readContext(body.context));
     if (!text) return NextResponse.json({ text: null });
 
-    const { error } = await user.supa.client.from("coach_messages").insert({ who: "coach", kind: "checkin", text });
-    if (error) console.error("Check-in persistence failed", error);
+    await saveCoachLine(user.supa.client, text, "checkin").catch((err) => console.error("Check-in persistence failed", err));
     return NextResponse.json({ text });
   }
 

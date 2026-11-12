@@ -10,6 +10,7 @@
 // the recent conversation — that's what makes the coach personal.
 
 import "server-only";
+import { generate } from "@/lib/gemini";
 import { COACH, EX, cardioBlock, fallbackReply, loadSummary, localISODate, readOut, round1, PROGRESS_EXERCISES, setDate, type ChatContext } from "@/lib/gymlog";
 import { ACTIONS_PROMPT, CHAT_RESPONSE_SCHEMA, sanitizeActions, type CoachProposal } from "@/lib/coachActions";
 import type { CoachUserData } from "@/lib/coachData";
@@ -24,49 +25,20 @@ Respect the lifter's profile: their goal shapes what you push, their injuries sh
 you avoid, their notes are things you observed before — act on them.
 If asked something the log can't answer, say so directly: "I only judge what is in the log."`;
 
-interface GeminiCallOptions {
-  prompt: string;
-  json?: boolean;
-  maxTokens?: number;
-  /** Thinking tokens to allow. Counts against maxTokens on 2.5-era models. */
-  thinking?: number;
-}
-
-async function callGemini({ prompt, json = false, maxTokens = 400, thinking = 0 }: GeminiCallOptions): Promise<string | null> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return null;
-
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: maxTokens,
-          // Coach replies are short; left unbounded, 2.5-era models spend the
-          // whole token budget on hidden "thinking" and the reply truncates.
-          thinkingConfig: { thinkingBudget: thinking },
-          ...(json ? { responseMimeType: "application/json", responseSchema: CHAT_RESPONSE_SCHEMA } : {}),
-        },
-      }),
-    });
-    if (!res.ok) {
-      console.error("Gemini request failed", res.status, await res.text());
-      return null;
-    }
-    const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    return typeof text === "string" ? text.trim() : null;
-  } catch (err) {
-    console.error("Gemini request errored", err);
-    return null;
-  }
+/** Coach replies: the coach voice, a short budget, and no hidden thinking unless asked. */
+async function callGemini({ prompt, json = false, maxTokens = 400, thinking = 0 }: { prompt: string; json?: boolean; maxTokens?: number; thinking?: number }): Promise<string | null> {
+  // Coach replies are short; left unbounded, 2.5-era models spend the whole
+  // token budget on hidden "thinking" and the reply truncates.
+  const text = await generate({
+    prompt,
+    system: SYSTEM_PROMPT,
+    schema: json ? CHAT_RESPONSE_SCHEMA : undefined,
+    temperature: 0.4,
+    maxTokens,
+    thinking,
+    label: "Gemini request",
+  });
+  return text === null ? null : text.trim();
 }
 
 // ── the personal context block ───────────────────────────────────────────

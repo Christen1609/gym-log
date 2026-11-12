@@ -20,6 +20,7 @@ import {
 } from "@/lib/gymlog";
 import { getSupabaseClient } from "@/lib/supabase";
 import { expandSetRows, fetchHistory } from "@/lib/trainingLog";
+import { CHAT_HISTORY_LIMIT, readConversation, saveCoachLine } from "@/lib/coachMemory";
 
 /**
  * Seeds exercises, the rotation, and the demo session history — but only into
@@ -155,18 +156,8 @@ export interface StoredChatMessage {
 }
 
 /** The recent conversation, oldest first, so the chat reopens where it left off. */
-export async function loadChatMessages(limit = 30): Promise<StoredChatMessage[]> {
-  const supabase = getSupabaseClient();
-  // Older rows share a timestamp per turn; "coach" < "user" here so that after
-  // the reverse the question still comes before its reply.
-  const { data, error } = await supabase
-    .from("coach_messages")
-    .select("who, text, created_at")
-    .order("created_at", { ascending: false })
-    .order("who", { ascending: true })
-    .limit(limit);
-  if (error) throw error;
-  return ((data ?? []) as { who: "user" | "coach"; text: string }[]).map(({ who, text }) => ({ who, text })).reverse();
+export function loadChatMessages(limit = CHAT_HISTORY_LIMIT): Promise<StoredChatMessage[]> {
+  return readConversation(getSupabaseClient(), limit);
 }
 
 export interface HistoryImportSet {
@@ -414,10 +405,8 @@ export async function removeSets(input: { exercise: string; date: string }): Pro
 }
 
 /** A coach line the app wrote itself (e.g. the receipt for a confirmed action). */
-export async function appendCoachMessage(text: string): Promise<void> {
-  const supabase = getSupabaseClient();
-  const { error } = await supabase.from("coach_messages").insert({ who: "coach", text });
-  if (error) throw error;
+export function appendCoachMessage(text: string): Promise<void> {
+  return saveCoachLine(getSupabaseClient(), text);
 }
 
 // ── cardio ───────────────────────────────────────────────────────────────

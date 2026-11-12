@@ -6,6 +6,7 @@
 import "server-only";
 import { toCardioEntry, type CardioEntry, type ExerciseData } from "@/lib/gymlog";
 import { fetchHistory } from "@/lib/trainingLog";
+import { PROMPT_HISTORY_LIMIT, readConversation, type ConversationLine } from "@/lib/coachMemory";
 import type { RequestSupabase } from "@/lib/supabaseServer";
 
 export interface CoachProfileRow {
@@ -40,12 +41,8 @@ export async function loadCoachData(supa: RequestSupabase): Promise<CoachUserDat
     fetchHistory(client).catch((): Record<string, ExerciseData> => ({})),
     client.from("profiles").select("goal, experience, days_per_week, injuries, preferences").maybeSingle(),
     client.from("coach_notes").select("id, note, created_at").eq("status", "active").order("created_at"),
-    client
-      .from("coach_messages")
-      .select("who, text, created_at")
-      .order("created_at", { ascending: false })
-      .order("who", { ascending: true })
-      .limit(12),
+    // A failed read coaches without the recent conversation rather than failing the request.
+    readConversation(client, PROMPT_HISTORY_LIMIT).catch((): ConversationLine[] => []),
     client
       .from("coach_messages")
       .select("created_at")
@@ -60,9 +57,7 @@ export async function loadCoachData(supa: RequestSupabase): Promise<CoachUserDat
     history,
     profile: (profileRes.data as CoachProfileRow | null) ?? null,
     notes: (notesRes.data ?? []) as CoachNoteRow[],
-    recent: ((recentRes.data ?? []) as { who: string; text: string }[])
-      .map(({ who, text }) => ({ who, text }))
-      .reverse(),
+    recent: recentRes,
     lastCheckinAt: (checkinRes.data as { created_at: string } | null)?.created_at ?? null,
     // A missing cardio table (migration not applied) must not break coaching.
     cardio: cardioRes.error ? [] : ((cardioRes.data ?? []) as Parameters<typeof toCardioEntry>[0][]).map(toCardioEntry),
