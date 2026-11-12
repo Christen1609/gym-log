@@ -121,7 +121,7 @@ Gym Log is a workout logger. The iOS app is a Capacitor shell that loads https:/
 - [ ] Enrol in the Apple Developer Program (paid annual membership) with the Apple ID that will own the app.
 - [ ] Answer the DSA trader declaration in App Store Connect. Likely answer: non-trader (the app is free and has no revenue).
 - [ ] Create the app record in App Store Connect with bundle id `com.christen1609.gymlog`.
-- [ ] Build with Xcode 26 on a Mac or a cloud Mac. Open `ios/App/App.xcodeproj`, set the signing team, then Product → Archive and upload. No Mac? Use Codemagic or GitHub Actions macOS runners.
+- [ ] Build with Xcode 26 on a Mac or a cloud Mac. In a fresh clone run `npm ci && npx cap sync ios` first (the Swift package points into node_modules, and the copied config is gitignored). Then open `ios/App/App.xcodeproj`, set the signing team, then Product → Archive and upload. No Mac? Use Codemagic or GitHub Actions macOS runners.
 - [ ] Create the demo account on the live site and put its credentials into the App Review notes above.
 - [ ] Take 6.9" screenshots at 1320×2868 (iPhone 17 Pro Max simulator, or Chrome DevTools at 440×956 with 3x device pixel ratio).
 - [ ] Confirm the Vercel cron for `/api/health` is enabled, or upgrade Supabase so the project does not pause.

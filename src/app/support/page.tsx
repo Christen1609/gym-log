@@ -48,6 +48,7 @@ export default function SupportPage() {
         <li>On the sign-in screen, enter your email address.</li>
         <li>Tap Forgot password.</li>
         <li>Open the reset link in the email we send you, and choose a new password.</li>
+        <li>On iPhone the link opens in Safari. Set the password there, then sign in to the app with it.</li>
       </ol>
       <p>If the email does not arrive within a few minutes, check your spam folder.</p>
 

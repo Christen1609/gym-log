@@ -5,6 +5,7 @@
 // still runs with zero configuration.
 
 import { createBrowserClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -22,4 +23,17 @@ export function getSupabaseClient() {
   // Data lives in the "gymlog" schema of a shared Supabase project, not public.
   client ??= createBrowserClient(url, anonKey, { db: { schema: "gymlog" } });
   return client;
+}
+
+/**
+ * Sends the password-reset email with the implicit flow, so the link works in
+ * whichever browser opens it (see recovery.ts). Holds no session of its own.
+ */
+export async function sendPasswordReset(email: string, redirectTo: string) {
+  if (!url || !anonKey) throw new Error("Supabase isn't configured.");
+  const resetClient = createClient(url, anonKey, {
+    auth: { flowType: "implicit", persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+  const { error } = await resetClient.auth.resetPasswordForEmail(email, { redirectTo });
+  if (error) throw error;
 }

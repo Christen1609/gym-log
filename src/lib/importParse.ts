@@ -233,17 +233,18 @@ function parseDeterministic(text: string, reference: Date): ImportResult {
       }
     }
   out.flags = [
-    "Parsed without AI (no GEMINI_API_KEY) — only exercises the app already knows were recognised.",
+    "Parsed without AI — only exercises the app already knows were recognised.",
     ...(skipped ? [`${skipped} lines could not be read and were skipped.`] : []),
   ];
   return out;
 }
 
-export async function parseWorkoutText(text: string, todayISO?: string): Promise<ImportResult> {
+/** `useAi` is the lifter's consent: without it the text never leaves the server. */
+export async function parseWorkoutText(text: string, todayISO?: string, useAi = false): Promise<ImportResult> {
   const clipped = text.length > MAX_INPUT_CHARS ? text.slice(0, MAX_INPUT_CHARS) : text;
   const today = todayISO && /^\d{4}-\d{2}-\d{2}$/.test(todayISO) ? todayISO : localISODate();
 
-  const ai = await parseWithGemini(clipped, today);
+  const ai = useAi ? await parseWithGemini(clipped, today) : null;
   const result = ai ?? parseDeterministic(clipped, new Date(`${today}T12:00:00`));
   if (text.length > MAX_INPUT_CHARS) {
     result.flags = [`The log was longer than ${MAX_INPUT_CHARS.toLocaleString()} characters; the tail was not read.`, ...result.flags].slice(0, 4);

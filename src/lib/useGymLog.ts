@@ -33,6 +33,7 @@ import {
 } from "@/lib/gymlog";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, getSupabaseClient } from "@/lib/supabase";
+import { recoveryTokensFromHash } from "@/lib/recovery";
 import {
   appendCoachMessage,
   deleteAccount as deleteAccountData,
@@ -359,6 +360,19 @@ export function useGymLog() {
         setSyncing(false);
       }
     };
+
+    // A reset link opened in this browser: take its session, drop the tokens
+    // from the address bar, then ask for the new password.
+    const recovery = recoveryTokensFromHash(window.location.hash);
+    if (recovery) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      supabase.auth
+        .setSession(recovery)
+        .then(({ error }: { error: unknown }) => {
+          if (!error) setRecovering(true);
+        })
+        .catch(() => {});
+    }
 
     supabase.auth
       .getSession()
@@ -699,6 +713,16 @@ export function useGymLog() {
     setRemindersOn(false);
     await cancelReminder();
     await getSupabaseClient().auth.signOut({ scope: "local" });
+    // Start clean: the deleted account's sets, chat and profile are still in
+    // memory, and the persist effect may already have written some back.
+    for (const key of LOCAL_KEYS) {
+      try {
+        window.localStorage.removeItem(key);
+      } catch {
+        /* storage unavailable */
+      }
+    }
+    window.location.reload();
   }, []);
 
   // Sets the new password on the recovery session; the app then carries on as normal.

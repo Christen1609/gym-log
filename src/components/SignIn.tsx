@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getSupabaseClient } from "@/lib/supabase";
+import { getSupabaseClient, sendPasswordReset } from "@/lib/supabase";
 import { isNativeApp } from "@/lib/native";
 
 export function SignIn({ theme }: { theme: "light" | "dark" }) {
@@ -31,10 +31,7 @@ export function SignIn({ theme }: { theme: "light" | "dark" }) {
     }
     setBusy(true);
     try {
-      const { error } = await getSupabaseClient().auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: window.location.origin,
-      });
-      if (error) throw error;
+      await sendPasswordReset(email.trim(), window.location.origin);
       setNotice("Check your email for a reset link.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't send the reset link.");
