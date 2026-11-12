@@ -10,7 +10,7 @@
 // the recent conversation — that's what makes the coach personal.
 
 import "server-only";
-import { COACH, EX, cardioBlock, fallbackReply, loadSummary, localISODate, readOut, round1, PROGRESS_EXERCISES, parseDateLabel, type ChatContext } from "@/lib/gymlog";
+import { COACH, EX, cardioBlock, fallbackReply, loadSummary, localISODate, readOut, round1, PROGRESS_EXERCISES, setDate, type ChatContext } from "@/lib/gymlog";
 import { ACTIONS_PROMPT, CHAT_RESPONSE_SCHEMA, sanitizeActions, type CoachProposal } from "@/lib/coachActions";
 import type { CoachUserData } from "@/lib/coachData";
 
@@ -77,8 +77,7 @@ function topExercises(data: CoachUserData, cap = 8): string[] {
   return Object.entries(data.history)
     .filter(([, ex]) => ex.hist.length > 0)
     .map(([name, ex]) => {
-      const lastLabel = ex.hist[ex.hist.length - 1].date;
-      return { name, time: parseDateLabel(lastLabel, reference)?.getTime() ?? 0 };
+      return { name, time: setDate(ex.hist[ex.hist.length - 1], reference)?.getTime() ?? 0 };
     })
     .sort((a, b) => b.time - a.time)
     .slice(0, cap)

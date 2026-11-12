@@ -256,3 +256,10 @@ describe("readAiConsent", () => {
     expect(readAiConsent("yes")).toBe(null);
   });
 });
+
+describe("history keeps the session's full date", () => {
+  it("collapseHistory carries the ISO date so the year is never guessed", () => {
+    const h = collapseHistory([ex("e1", "Back Squat")], [set({ session_id: "s1", date: "2025-10-20" })]);
+    expect(h["Back Squat"].hist[0]).toMatchObject({ date: "20 Oct", iso: "2025-10-20" });
+  });
+});

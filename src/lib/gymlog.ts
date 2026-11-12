@@ -10,7 +10,10 @@ export type Units = "kg" | "lb";
 export type Status = "up" | "grind" | "flat" | "down";
 
 export interface SetRow {
+  /** Display label ("Jul 31"). Never parse it back into a date — use setDate(). */
   date: string;
+  /** The session's full ISO date (yyyy-mm-dd). Set on everything loaded from the log; absent only on seed data. */
+  iso?: string;
   /** null when the lifter didn't note it — kept in history, left out of the maths. */
   w: number | null;
   sets: number;
@@ -217,6 +220,14 @@ export function parseDateLabel(label: string, reference = new Date()): Date | nu
   return parsed;
 }
 
+/**
+ * When a history entry happened. Uses the stored ISO date, so the year is
+ * never guessed; only seed data (no iso) falls back to reading the label.
+ */
+export function setDate(set: Pick<SetRow, "date" | "iso">, reference = new Date()): Date | null {
+  return parseDateLabel(set.iso ?? set.date, reference);
+}
+
 export function muscleFromGroup(group: string): string {
   return group.split(" · ")[0] || group;
 }
@@ -234,7 +245,7 @@ export function findLatestSession(
 
   for (const [exercise, exerciseData] of Object.entries(data)) {
     for (const set of exerciseData.hist) {
-      const parsed = parseDateLabel(set.date, reference);
+      const parsed = setDate(set, reference);
       if (!parsed) continue;
       const time = parsed.getTime();
       if (!latest || time > latest.time) {
@@ -327,7 +338,7 @@ export function unnotedGaps(
   const reference = new Date(`${todayISO}T12:00:00`);
   const entries = planForDay(day, data).flatMap((exercise) =>
     data[exercise].hist.flatMap((row) => {
-      const parsed = parseDateLabel(row.date, reference);
+      const parsed = setDate(row, reference);
       return parsed ? [{ exercise, row, iso: localISODate(parsed) }] : [];
     })
   );
@@ -495,7 +506,7 @@ export function historyGroupLabel(row: { muscle_group: string | null; is_compoun
  * and its set count.
  */
 export function collapseHistory(exercises: HistoryExerciseRow[], sets: HistorySetRow[]): Record<string, ExerciseData> {
-  type Dated = SetRow & { _iso: string };
+  type Dated = SetRow & { iso: string };
   const byExercise = new Map<string, Map<string, Dated>>();
 
   for (const row of sets) {
@@ -513,7 +524,7 @@ export function collapseHistory(exercises: HistoryExerciseRow[], sets: HistorySe
         reps,
         rpe: row.rpe === null ? null : Number(row.rpe),
         note: row.felt_note ?? "",
-        _iso: row.date,
+        iso: row.date,
       });
     } else {
       existing.sets += 1;
@@ -531,7 +542,7 @@ export function collapseHistory(exercises: HistoryExerciseRow[], sets: HistorySe
   const result: Record<string, ExerciseData> = {};
   for (const ex of exercises) {
     const sessions = byExercise.get(ex.id);
-    const hist = sessions ? [...sessions.values()].sort((a, b) => a._iso.localeCompare(b._iso)) : [];
+    const hist = sessions ? [...sessions.values()].sort((a, b) => a.iso.localeCompare(b.iso)) : [];
     result[ex.name] = { group: historyGroupLabel(ex), hist };
   }
   return result;

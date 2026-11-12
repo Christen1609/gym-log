@@ -106,3 +106,21 @@ describe("cardio numbers written loosely", () => {
     expect(sanitizeActions(["log_cardio | kind=run | distance_km=3 mi"], history, TODAY)[0]).toMatchObject({ distanceKm: 4.83 });
   });
 });
+
+describe("coach fixes a session more than a year old", () => {
+  // History loaded from the log carries the session's full ISO date; the
+  // "20 Oct" label alone would be read back as 20 Oct of this year.
+  const old: Record<string, ExerciseData> = {
+    "Back Squat": { group: "Legs · compound", hist: [{ date: "20 Oct", iso: "2025-10-20", w: 100, sets: 3, reps: 5, rpe: 8 }] },
+  };
+
+  it("keeps a correct_sets aimed at that session", () => {
+    const [p] = sanitizeActions(["correct_sets | exercise=Back Squat | date=2025-10-20 | reps=6"], old, TODAY);
+    expect(p).toMatchObject({ type: "correct_sets", date: "2025-10-20", reps: 6 });
+  });
+
+  it("defaults a remove_sets with no date to that session, not this year's 20 Oct", () => {
+    const [p] = sanitizeActions(["remove_sets | exercise=Back Squat"], old, TODAY);
+    expect(p).toMatchObject({ type: "remove_sets", date: "2025-10-20" });
+  });
+});

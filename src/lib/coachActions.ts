@@ -5,7 +5,7 @@
 // writes when the lifter taps Confirm. Shared by both sides, so it must stay
 // free of server-only and browser-only imports.
 
-import { ALIAS, ROT, cardioSummary, formatHistDate, loadSummary, localISODate, parseDateLabel, toDisplayWeight, type ExerciseData, type Units } from "@/lib/gymlog";
+import { ALIAS, ROT, cardioSummary, formatHistDate, loadSummary, localISODate, setDate, toDisplayWeight, type ExerciseData, type Units } from "@/lib/gymlog";
 
 export const MUSCLE_GROUPS = ["Chest", "Back", "Arms", "Legs", "Shoulders", "Core"];
 export const ACTION_TYPES = ["log_sets", "correct_sets", "remove_sets", "set_next_day", "log_cardio"] as const;
@@ -168,7 +168,7 @@ function readDate(value: unknown, todayISO: string): string | "absent" | null {
 function sessionDatesFor(exercise: string, history: Record<string, ExerciseData>, todayISO: string): string[] {
   const reference = new Date(`${todayISO}T12:00:00`);
   return (history[exercise]?.hist ?? [])
-    .map((s) => parseDateLabel(s.date, reference))
+    .map((s) => setDate(s, reference))
     .filter((d): d is Date => d !== null)
     .map((d) => localISODate(d));
 }
