@@ -6,27 +6,9 @@
 import "server-only";
 import { generate } from "@/lib/gemini";
 import { ALIAS, localISODate, parseDateLabel, parseLog } from "@/lib/gymlog";
+import type { ImportExercise, ImportSession, ImportSet } from "@/lib/trainingLog";
 
-export interface ImportSet {
-  exercise: string;
-  weight: number;
-  reps: number;
-  count: number;
-  rpe: number | null;
-  note: string | null;
-}
-
-export interface ImportSession {
-  date: string; // YYYY-MM-DD
-  day_label: string;
-  sets: ImportSet[];
-}
-
-export interface ImportExercise {
-  name: string;
-  muscle_group: string | null;
-  is_compound: boolean;
-}
+export type { ImportExercise, ImportSession, ImportSet };
 
 export interface ImportResult {
   sessions: ImportSession[];

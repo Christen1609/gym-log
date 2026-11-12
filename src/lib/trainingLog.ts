@@ -29,6 +29,32 @@ export async function fetchHistory(client: LogClient): Promise<Record<string, Ex
   );
 }
 
+// ── what an import hands the log ──────────────────────────────────────────
+// One shape from the parser (importParse.ts) through the browser
+// (notionImport.ts) to the bulk save (db.ts importHistory).
+
+/** N identical sets of one exercise in an imported session. */
+export interface ImportSet {
+  exercise: string;
+  weight: number;
+  reps: number;
+  count: number;
+  rpe: number | null;
+  note: string | null;
+}
+
+export interface ImportSession {
+  date: string; // YYYY-MM-DD
+  day_label: string;
+  sets: ImportSet[];
+}
+
+export interface ImportExercise {
+  name: string;
+  muscle_group: string | null;
+  is_compound: boolean;
+}
+
 export interface SetEntryRows {
   sessionId: string;
   exerciseId: string;

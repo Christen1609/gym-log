@@ -5,7 +5,7 @@
 
 import { localISODate, readAiConsent } from "@/lib/gymlog";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
-import type { HistoryImportExercise, HistoryImportSession } from "@/lib/db";
+import type { ImportExercise, ImportSession } from "@/lib/trainingLog";
 
 /** True when the "Connect Notion" OAuth button should show at all. */
 export const notionOauthEnabled = Boolean(process.env.NEXT_PUBLIC_NOTION_CLIENT_ID);
@@ -23,8 +23,8 @@ export interface NotionPageRef {
 }
 
 export interface ParsedImport {
-  sessions: HistoryImportSession[];
-  exercises: HistoryImportExercise[];
+  sessions: ImportSession[];
+  exercises: ImportExercise[];
   flags: string[];
 }
 

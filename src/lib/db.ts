@@ -19,7 +19,7 @@ import {
   type CardioEntry,
 } from "@/lib/gymlog";
 import { getSupabaseClient } from "@/lib/supabase";
-import { expandSetRows, fetchHistory } from "@/lib/trainingLog";
+import { expandSetRows, fetchHistory, type ImportExercise, type ImportSession } from "@/lib/trainingLog";
 import { CHAT_HISTORY_LIMIT, readConversation, saveCoachLine } from "@/lib/coachMemory";
 
 /**
@@ -160,34 +160,13 @@ export function loadChatMessages(limit = CHAT_HISTORY_LIMIT): Promise<StoredChat
   return readConversation(getSupabaseClient(), limit);
 }
 
-export interface HistoryImportSet {
-  exercise: string;
-  weight: number;
-  reps: number;
-  count: number;
-  rpe: number | null;
-  note: string | null;
-}
-
-export interface HistoryImportSession {
-  date: string;
-  day_label: string;
-  sets: HistoryImportSet[];
-}
-
-export interface HistoryImportExercise {
-  name: string;
-  muscle_group: string | null;
-  is_compound: boolean;
-}
-
 /**
  * Bulk-saves a parsed import. Re-runnable: dates that already have a session
  * are skipped whole, and exercises are matched by name before being created.
  */
 export async function importHistory(
-  sessions: HistoryImportSession[],
-  exercises: HistoryImportExercise[]
+  sessions: ImportSession[],
+  exercises: ImportExercise[]
 ): Promise<{ sessions: number; sets: number; skipped: number }> {
   const supabase = getSupabaseClient();
 
