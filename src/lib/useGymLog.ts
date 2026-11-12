@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   COACH,
   EX,
@@ -9,7 +9,6 @@ import {
   THINKING,
   Units,
   entryE1rm,
-  findLatestSession,
   getTodayInfo,
   loadSummary,
   localISODate,
@@ -19,8 +18,6 @@ import {
   resolveDay,
   unnotedGaps,
   cardioSummary,
-  daysSinceTraining,
-  isoDaysAgo,
   nextReminderAt,
   formatHistDate,
   readAiConsent,
@@ -51,7 +48,9 @@ import {
   seedIfEmpty,
   type CoachProfile,
 } from "@/lib/db";
-import { proposalText, type CoachProposal } from "@/lib/coachActions";
+import type { CoachProposal } from "@/lib/coachActions";
+import { coachContext, loggedLine, nudgeDue, resolveToday } from "@/lib/today";
+import { applyCoachProposal, requestCheckin, requestCoachReply, requestExerciseJudgment, type LogWriter } from "@/lib/coachClient";
 import { isNativeApp } from "@/lib/native";
 import {
   cancelReminder,
@@ -127,6 +126,9 @@ interface PersistedState {
   /** `${day}:${iso}` of the last "you didn't note…" reminder the lifter dismissed. */
   gapsDismissed: string;
 }
+
+/** The real log writes a confirmed coach proposal goes through. */
+const LOG_WRITER: LogWriter = { logSets, logCardio, correctSets, removeSets, loadHistory, loadCardio };
 
 const STORAGE_KEY = "gymlog:v1";
 const CONSENT_KEY = "gymlog.aiConsent";
@@ -238,16 +240,9 @@ export function useGymLog() {
     if (aiConsentRef.current !== "granted") return;
     if (fetchedCoach.current.has(name)) return;
     fetchedCoach.current.add(name);
-    fetch("/api/coach", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "exercise", exercise: name, ai: aiConsentRef.current === "granted" }),
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.text) setCoachText((prev) => ({ ...prev, [name]: data.text }));
-      })
-      .catch(() => {});
+    void requestExerciseJudgment(name).then((text) => {
+      if (text) setCoachText((prev) => ({ ...prev, [name]: text }));
+    });
   }, []);
 
   // Runs once, client-only, after the hydration-matching first render. Applies
@@ -329,29 +324,10 @@ export function useGymLog() {
         void (async () => {
           // Without consent the coach doesn't speak first; nothing is sent.
           if (aiConsentRef.current !== "granted") return;
-          try {
-            const now = new Date();
-            const latest = findLatestSession(h, now);
-            const res = await fetch("/api/coach", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                type: "checkin",
-                ai: true,
-                context: {
-                  todayLabel: getTodayInfo(now).label,
-                  lastSessionDay: latest?.day,
-                  lastSessionDate: latest?.date,
-                },
-              }),
-            });
-            const data = res.ok ? await res.json() : null;
-            if (data?.text) {
-              setMsgs((m) => m.concat({ id: msgIdRef.current++, who: "coach", text: data.text as string }));
-            }
-          } catch {
-            /* a missed check-in is not an error the user should see */
-          }
+          // A missed check-in is not an error the user should see; requestCheckin never throws.
+          const now = new Date();
+          const text = await requestCheckin(coachContext(h, resolveDay(h, now).day, now));
+          if (text) setMsgs((m) => m.concat({ id: msgIdRef.current++, who: "coach", text }));
         })();
       } catch (err) {
         // Leave the seeded history in place so the app stays usable.
@@ -454,6 +430,14 @@ export function useGymLog() {
     [ensureCoachText]
   );
 
+  // What's on today: the day, the last session, whether a workout is unlogged.
+  // Computed here, above the callbacks, so the coach is told the same day the screen shows.
+  const today = useMemo(
+    () => resolveToday({ history, cardio, dayOverride, dayOverrideOn, todayISO: todayInfo.iso }),
+    [history, cardio, dayOverride, dayOverrideOn, todayInfo.iso]
+  );
+  const currentNextDay = today.day;
+
   const say = useCallback((text: string) => {
     const mine: ChatMessage = { id: msgIdRef.current++, who: "user", text };
     setMsgs((m) => m.concat(mine));
@@ -468,42 +452,15 @@ export function useGymLog() {
 
     thinkTimeout.current = setTimeout(async () => {
       clearInterval(thinkInterval.current);
-      let replyText: string;
-      let proposals: ProposalCard[] | undefined;
-      try {
-        const res = await fetch("/api/coach", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "chat",
-            ai: aiConsentRef.current === "granted",
-            message: text,
-            context: (() => {
-              const now = new Date();
-              const latest = findLatestSession(history, now);
-              return {
-                todayLabel: getTodayInfo(now).label,
-                todayISO: localISODate(now),
-                nextDay: resolveDay(history, now).day,
-                lastSessionDay: latest?.day,
-                lastSessionDate: latest?.date,
-              };
-            })(),
-          }),
-        });
-        const data = res.ok ? await res.json() : null;
-        replyText = data?.text ?? "I only judge what is in the log. Ask me about an exercise by name, or what is on today.";
-        if (Array.isArray(data?.proposals) && data.proposals.length) {
-          proposals = (data.proposals as CoachProposal[]).map((proposal) => ({ proposal, status: "pending" }));
-        }
-      } catch {
-        replyText = "I only judge what is in the log. Ask me about an exercise by name, or what is on today.";
-      }
-      const reply: ChatMessage = { id: msgIdRef.current++, who: "coach", text: replyText, proposals };
+      const result = await requestCoachReply(text, coachContext(history, currentNextDay), aiConsentRef.current === "granted");
+      const proposals: ProposalCard[] | undefined = result.proposals.length
+        ? result.proposals.map((proposal) => ({ proposal, status: "pending" }))
+        : undefined;
+      const reply: ChatMessage = { id: msgIdRef.current++, who: "coach", text: result.text, proposals };
       setMsgs((m) => m.concat(reply));
       setTyping(false);
     }, 2400);
-  }, [history]);
+  }, [history, currentNextDay]);
 
   // Takes plain text rather than an input ref — the DOM ref that owns the
   // input value belongs to whichever screen renders it (see TodayScreen /
@@ -527,16 +484,7 @@ export function useGymLog() {
   const confirmSave = useCallback(() => {
     if (!parsed) return;
     void tapHaptic();
-    setLogged((l) =>
-      l.concat([
-        {
-          name: parsed.name,
-          summary:
-            loadSummary({ w: parsed.weight, sets: parsed.sets, reps: parsed.reps }, units) +
-            (parsed.rpe ? ` · RPE ${parsed.rpe}` : ""),
-        },
-      ])
-    );
+    setLogged((l) => l.concat(loggedLine(parsed.name, parsed, units)));
     setSheet(null);
     setParsed(null);
     setScreen("today");
@@ -784,28 +732,15 @@ export function useGymLog() {
   // without Supabase, the user's own rows once signed in.
   const ro = readOut(activeEx, history);
   const cv = useCallback((w: number) => toDisplayWeight(w, units), [units]);
-  const todayReference = todayInfo.iso ? new Date(`${todayInfo.iso}T12:00:00`) : new Date();
-
-  // The whole point: the app reads the calendar and the log and decides for
-  // itself which day is on. `dayOverride` only wins for the day it was set.
-  const resolved = resolveDay(history, todayReference);
-  const latestSession = resolved.lastSession;
-  const overrideActive = Boolean(dayOverride) && dayOverrideOn === todayInfo.iso;
-  const currentNextDay = overrideActive ? (dayOverride as string) : resolved.day;
+  // The day itself is resolved above (`today`), from the calendar and the log;
+  // a hand-picked day only wins for the day it was picked.
+  const latestSession = today.lastSession;
 
   const lastSessionText = latestSession
     ? `last ${latestSession.day.toLowerCase()} session ${latestSession.date}`
     : "no sessions logged yet";
 
-  // A session is "missing" once a full day has gone by without one. That is
-  // what the prompt asks about, and it is derived, never stored.
-  // Cardio counts as training here (and only here — it never moves the rotation).
-  const daysSinceLast = daysSinceTraining(resolved.daysSinceLast, cardio, todayInfo.iso || localISODate());
-  const workoutUnlogged = daysSinceLast === null || daysSinceLast >= 1;
-
-  const dayTitle = `${currentNextDay} day`;
-  // The calendar date of the last training, reconstructed from how long ago it was.
-  const lastTrainingISO = daysSinceLast === null || !todayInfo.iso ? null : isoDaysAgo(todayInfo.iso, daysSinceLast);
+  const { daysSinceLast, workoutUnlogged, dayTitle, lastTrainingISO } = today;
 
   // Keeps the one pending reminder pointed at the next due moment. Re-runs when
   // the last training date moves (a logged session) or the rotation day changes.
@@ -851,54 +786,30 @@ export function useGymLog() {
       const card = msgs.find((m) => m.id === msgId)?.proposals?.find((c) => c.proposal.id === proposalId);
       if (!card || card.status !== "pending") return;
       const p = card.proposal;
-      const today = todayInfo.iso || localISODate();
+      const todayISO = todayInfo.iso || localISODate();
       setProposalStatus(msgId, proposalId, "applying");
 
       applyQueue.current = applyQueue.current.then(async () => {
         try {
-          if (p.type === "set_next_day") {
-            pickDay(p.day);
-          } else {
-            if (!isSupabaseConfigured || !authed) throw new Error("Not signed in");
-            if (p.type === "log_sets") {
-              await logSets({
-                exercise: p.exercise,
-                muscleGroup: p.muscleGroup,
-                date: p.date,
-                weightKg: p.weightKg,
-                reps: p.reps,
-                sets: p.sets,
-                rpe: p.rpe,
-              });
-              if (p.date === today) {
-                setLogged((l) =>
-                  l.concat({
-                    name: p.exercise,
-                    summary: loadSummary({ w: p.weightKg, sets: p.sets, reps: p.reps }, units) + (p.rpe ? ` · RPE ${p.rpe}` : ""),
-                  })
-                );
-                setLoggedOn(today);
-                setLoggedPromptOn(today);
-              }
-            } else if (p.type === "log_cardio") {
-              await logCardio({ date: p.date, kind: p.kind, minutes: p.minutes, distanceKm: p.distanceKm, note: p.note });
-              setCardio(await loadCardio());
-              if (p.date === today) {
-                setLogged((l) => l.concat({ name: "Cardio", summary: cardioSummary(p) }));
-                setLoggedOn(today);
-                setLoggedPromptOn(today);
-              }
-            } else if (p.type === "correct_sets") {
-              await correctSets({ exercise: p.exercise, date: p.date, weightKg: p.weightKg, reps: p.reps, rpe: p.rpe });
-            } else {
-              await removeSets({ exercise: p.exercise, date: p.date });
-            }
-            setHistory(await loadHistory());
+          const out = await applyCoachProposal(p, {
+            today: todayISO,
+            units,
+            signedIn: isSupabaseConfigured && Boolean(authed),
+            writer: LOG_WRITER,
+          });
+          if (out.pickDay) pickDay(out.pickDay);
+          if (out.cardio) setCardio(out.cardio);
+          if (out.loggedToday) {
+            const line = out.loggedToday;
+            setLogged((l) => l.concat(line));
+            setLoggedOn(todayISO);
+            setLoggedPromptOn(todayISO);
           }
+          if (out.history) setHistory(out.history);
 
           setProposalStatus(msgId, proposalId, "done");
           void tapHaptic();
-          const receipt = proposalText(p, units, today, "done");
+          const receipt = out.receipt;
           setMsgs((m) => m.concat({ id: msgIdRef.current++, who: "coach", text: receipt }));
           if (isSupabaseConfigured && authed) {
             void appendCoachMessage(receipt).catch((err) => console.error("Receipt save failed", err));
@@ -977,11 +888,17 @@ export function useGymLog() {
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (remindedRef.current) return;
-    if (!hydrated || !todayInfo.iso || syncing) return;
-    if (authed !== true) return;
-    if (!workoutUnlogged) return;
-    if (loggedPromptOn === todayInfo.iso) return;
-    if (sheet !== null || screen !== "today") return;
+    const due = nudgeDue({
+      hydrated,
+      todayISO: todayInfo.iso,
+      syncing,
+      authed,
+      workoutUnlogged,
+      loggedPromptOn,
+      sheetOpen: sheet !== null,
+      onToday: screen === "today",
+    });
+    if (!due) return;
     remindedRef.current = true;
     setSheet("reminder");
   }, [hydrated, todayInfo.iso, syncing, authed, workoutUnlogged, loggedPromptOn, sheet, screen]);
@@ -1006,7 +923,7 @@ export function useGymLog() {
     nextDay: currentNextDay,
     rotation,
     dayTitle,
-    dayIsAuto: !overrideActive,
+    dayIsAuto: today.dayIsAuto,
     clearDayOverride: () => {
       setDayOverride(null);
       setDayOverrideOn("");
