@@ -24,6 +24,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Gym Log doesn&apos;t read your Health data; iOS asks for this alongside saving workouts.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Gym Log saves the workouts you log to Apple Health, if you turn it on in Settings.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
