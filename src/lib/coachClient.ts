@@ -56,7 +56,20 @@ export async function requestExerciseJudgment(exercise: string): Promise<string 
 }
 
 /** The log writes a confirmed proposal can make — db.ts in the app, a fake in tests. */
-export type LogWriter = Pick<typeof Db, "logSets" | "logCardio" | "correctSets" | "removeSets" | "loadHistory" | "loadCardio">;
+export type LogWriter = Pick<
+  typeof Db,
+  "logSets" | "logCardio" | "correctSets" | "removeSets" | "loadHistory" | "loadCardio" | "appendCoachMessage"
+>;
+
+/** A reload after a write that already worked: a failure is logged, not thrown, so the write isn't retried. */
+async function reload<T>(load: () => Promise<T>, what: string): Promise<T | undefined> {
+  try {
+    return await load();
+  } catch (err) {
+    console.error(`Reload of ${what} failed after a coach action`, err);
+    return undefined;
+  }
+}
 
 /** What confirming a proposal changed, for the caller to put on screen. */
 export interface ProposalOutcome {
@@ -75,7 +88,9 @@ export interface ProposalOutcome {
 /**
  * Carries out one confirmed proposal. This is the only path from a coach
  * suggestion to the log. Throws when the write fails or when a log write is
- * attempted signed out, so the card can show it failed.
+ * attempted signed out, so the card can show it failed. Once the write has
+ * worked, nothing after it throws: a failed reload leaves that field out, and
+ * the receipt is saved to the conversation in the background.
  */
 export async function applyCoachProposal(
   p: CoachProposal,
@@ -83,7 +98,10 @@ export async function applyCoachProposal(
 ): Promise<ProposalOutcome> {
   const { today, units, signedIn, writer } = opts;
   const receipt = proposalText(p, units, today, "done");
-  if (p.type === "set_next_day") return { pickDay: p.day, receipt };
+  if (p.type === "set_next_day") {
+    if (signedIn) saveReceipt(writer, receipt);
+    return { pickDay: p.day, receipt };
+  }
   if (!signedIn) throw new Error("Not signed in");
 
   const out: ProposalOutcome = { receipt };
@@ -100,13 +118,21 @@ export async function applyCoachProposal(
     if (p.date === today) out.loggedToday = loggedLine(p.exercise, { weight: p.weightKg, sets: p.sets, reps: p.reps, rpe: p.rpe }, units);
   } else if (p.type === "log_cardio") {
     await writer.logCardio({ date: p.date, kind: p.kind, minutes: p.minutes, distanceKm: p.distanceKm, note: p.note });
-    out.cardio = await writer.loadCardio();
     if (p.date === today) out.loggedToday = { name: "Cardio", summary: cardioSummary(p) };
+    // Cardio never touches set history, so only cardio is reloaded.
+    out.cardio = await reload(writer.loadCardio, "cardio");
+    saveReceipt(writer, receipt);
+    return out;
   } else if (p.type === "correct_sets") {
     await writer.correctSets({ exercise: p.exercise, date: p.date, weightKg: p.weightKg, reps: p.reps, rpe: p.rpe });
   } else {
     await writer.removeSets({ exercise: p.exercise, date: p.date });
   }
-  out.history = await writer.loadHistory();
+  out.history = await reload(writer.loadHistory, "history");
+  saveReceipt(writer, receipt);
   return out;
+}
+
+function saveReceipt(writer: LogWriter, receipt: string) {
+  void writer.appendCoachMessage(receipt).catch((err) => console.error("Receipt save failed", err));
 }

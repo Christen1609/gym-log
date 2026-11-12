@@ -38,11 +38,17 @@ export async function loadCoachData(supa: RequestSupabase): Promise<CoachUserDat
 
   const [history, profileRes, notesRes, recentRes, checkinRes, cardioRes] = await Promise.all([
     // A failed history read coaches on an empty log rather than failing the request.
-    fetchHistory(client).catch((): Record<string, ExerciseData> => ({})),
+    fetchHistory(client).catch((err): Record<string, ExerciseData> => {
+      console.error("Coach history load failed", err);
+      return {};
+    }),
     client.from("profiles").select("goal, experience, days_per_week, injuries, preferences").maybeSingle(),
     client.from("coach_notes").select("id, note, created_at").eq("status", "active").order("created_at"),
     // A failed read coaches without the recent conversation rather than failing the request.
-    readConversation(client, PROMPT_HISTORY_LIMIT).catch((): ConversationLine[] => []),
+    readConversation(client, PROMPT_HISTORY_LIMIT).catch((err): ConversationLine[] => {
+      console.error("Coach conversation load failed", err);
+      return [];
+    }),
     client
       .from("coach_messages")
       .select("created_at")

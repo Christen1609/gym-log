@@ -100,8 +100,12 @@ export function loggedLine(
   return { name, summary: loadSummary({ w: s.weight, sets: s.sets, reps: s.reps }, units) + (s.rpe ? ` · RPE ${s.rpe}` : "") };
 }
 
-/** What the coach is told about today, so it plans the same day the screen shows. */
-export function coachContext(history: Record<string, ExerciseData>, day: string, now = new Date()) {
+/**
+ * What the coach is told about today. Chat passes the day the screen shows so
+ * the coach plans that day; the weekly check-in passes none, since it runs at
+ * sign-in before a hand-picked day is known.
+ */
+export function coachContext(history: Record<string, ExerciseData>, day: string | undefined, now = new Date()) {
   const latest = findLatestSession(history, now);
   return {
     todayLabel: getTodayInfo(now).label,

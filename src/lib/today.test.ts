@@ -68,3 +68,9 @@ describe("coachContext", () => {
     expect(ctx).toMatchObject({ todayISO: TODAY, nextDay: "Legs", lastSessionDay: "Chest", lastSessionDate: "10 Nov" });
   });
 });
+
+describe("coachContext without a day", () => {
+  it("leaves nextDay out, as the weekly check-in always has", () => {
+    expect(coachContext(history, undefined, new Date(`${TODAY}T12:00:00`)).nextDay).toBeUndefined();
+  });
+});

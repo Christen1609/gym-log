@@ -8,7 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { collapseHistory, type ExerciseData, type HistoryExerciseRow, type HistorySetRow } from "@/lib/gymlog";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the browser and server clients differ only in schema generics
-type LogClient = Pick<SupabaseClient<any, any, any>, "from">;
+export type LogClient = Pick<SupabaseClient<any, any, any>, "from">;
 
 /** Loads every logged set and collapses it into the per-exercise history the app computes from. */
 export async function fetchHistory(client: LogClient): Promise<Record<string, ExerciseData>> {

@@ -13,6 +13,7 @@ function fakeWriter() {
     removeSets: async (i) => (calls.push(`removeSets ${i.exercise}`), 1),
     loadHistory: async () => (calls.push("loadHistory"), {}),
     loadCardio: async () => (calls.push("loadCardio"), []),
+    appendCoachMessage: async (t) => void calls.push(`appendCoachMessage ${t}`),
   };
   return { writer, calls };
 }
@@ -34,7 +35,7 @@ describe("applyCoachProposal", () => {
   it("logs sets for today, reloads history, and adds a line to Logged today", async () => {
     const { writer, calls } = fakeWriter();
     const out = await applyCoachProposal(logSets(TODAY), { today: TODAY, units: "kg", signedIn: true, writer });
-    expect(calls).toEqual([`logSets Bench Press ${TODAY}`, "loadHistory"]);
+    expect(calls.slice(0, 2)).toEqual([`logSets Bench Press ${TODAY}`, "loadHistory"]);
     expect(out.loggedToday).toEqual({ name: "Bench Press", summary: "80 kg × 3×5 · RPE 8" });
     expect(out.history).toEqual({});
     expect(out.receipt).toMatch(/^Logged Bench Press/);
@@ -65,7 +66,7 @@ describe("applyCoachProposal", () => {
       { id: "3", type: "log_cardio", date: TODAY, kind: "Run", minutes: 30, distanceKm: null, note: null },
       { today: TODAY, units: "kg", signedIn: true, writer }
     );
-    expect(calls).toEqual(["logCardio Run", "loadCardio", "loadHistory"]);
+    expect(calls.slice(0, 2)).toEqual(["logCardio Run", "loadCardio"]);
     expect(out.loggedToday?.name).toBe("Cardio");
   });
 });
@@ -82,5 +83,40 @@ describe("requestCoachReply", () => {
     const proposal = logSets(TODAY);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ text: "Nice.", proposals: [proposal] }) }));
     expect(await requestCoachReply("did 3x5 bench", {}, true)).toEqual({ text: "Nice.", proposals: [proposal] });
+  });
+});
+
+describe("applyCoachProposal after the write succeeds", () => {
+  it("still reports Logged today when the history reload fails, so the lifter doesn't confirm twice", async () => {
+    const { writer } = fakeWriter();
+    writer.loadHistory = async () => {
+      throw new Error("blip");
+    };
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const out = await applyCoachProposal(logSets(TODAY), { today: TODAY, units: "kg", signedIn: true, writer });
+    expect(out.loggedToday?.name).toBe("Bench Press");
+    expect(out.history).toBeUndefined();
+    vi.restoreAllMocks();
+  });
+
+  it("doesn't reload set history after a cardio write", async () => {
+    const { writer, calls } = fakeWriter();
+    await applyCoachProposal(
+      { id: "3", type: "log_cardio", date: TODAY, kind: "Run", minutes: 30, distanceKm: null, note: null },
+      { today: TODAY, units: "kg", signedIn: true, writer }
+    );
+    expect(calls).not.toContain("loadHistory");
+  });
+
+  it("saves the receipt to the conversation when signed in", async () => {
+    const { writer, calls } = fakeWriter();
+    const out = await applyCoachProposal(logSets(TODAY), { today: TODAY, units: "kg", signedIn: true, writer });
+    expect(calls).toContain(`appendCoachMessage ${out.receipt}`);
+  });
+
+  it("doesn't save a receipt signed out", async () => {
+    const { writer, calls } = fakeWriter();
+    await applyCoachProposal({ id: "2", type: "set_next_day", day: "Legs" }, { today: TODAY, units: "kg", signedIn: false, writer });
+    expect(calls.some((c) => c.startsWith("appendCoachMessage"))).toBe(false);
   });
 });

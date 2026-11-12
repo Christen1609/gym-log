@@ -16,7 +16,6 @@ import {
   parseLog,
   planForDay,
   readOut,
-  resolveDay,
   unnotedGaps,
   cardioSummary,
   nextReminderAt,
@@ -129,7 +128,7 @@ interface PersistedState {
 }
 
 /** The real log writes a confirmed coach proposal goes through. */
-const LOG_WRITER: LogWriter = { logSets, logCardio, correctSets, removeSets, loadHistory, loadCardio };
+const LOG_WRITER: LogWriter = { logSets, logCardio, correctSets, removeSets, loadHistory, loadCardio, appendCoachMessage };
 
 const STORAGE_KEY = "gymlog:v1";
 const CONSENT_KEY = "gymlog.aiConsent";
@@ -327,7 +326,7 @@ export function useGymLog() {
           if (aiConsentRef.current !== "granted") return;
           // A missed check-in is not an error the user should see; requestCheckin never throws.
           const now = new Date();
-          const text = await requestCheckin(coachContext(h, resolveDay(h, now).day, now));
+          const text = await requestCheckin(coachContext(h, undefined, now));
           if (text) setMsgs((m) => m.concat({ id: msgIdRef.current++, who: "coach", text }));
         })();
       } catch (err) {
@@ -810,11 +809,7 @@ export function useGymLog() {
 
           setProposalStatus(msgId, proposalId, "done");
           void tapHaptic();
-          const receipt = out.receipt;
-          setMsgs((m) => m.concat({ id: msgIdRef.current++, who: "coach", text: receipt }));
-          if (isSupabaseConfigured && authed) {
-            void appendCoachMessage(receipt).catch((err) => console.error("Receipt save failed", err));
-          }
+          setMsgs((m) => m.concat({ id: msgIdRef.current++, who: "coach", text: out.receipt }));
         } catch (err) {
           console.error("Coach action failed", err);
           setProposalStatus(msgId, proposalId, "failed");

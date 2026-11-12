@@ -255,7 +255,8 @@ export function findLatestSession(
   for (const [exercise, exerciseData] of Object.entries(data)) {
     for (const set of exerciseData.hist) {
       const parsed = setDate(set, reference);
-      if (!parsed) continue;
+      // A session dated after today isn't done yet, so it can't be the last one.
+      if (!parsed || daysBetween(parsed, reference) < 0) continue;
       const time = parsed.getTime();
       if (!latest || time > latest.time) {
         latest = {

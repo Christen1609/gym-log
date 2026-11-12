@@ -3,10 +3,7 @@
 // route (saving a turn, a check-in, note changes) share this module, so the
 // ordering rules for reading the conversation live in one place.
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the browser and server clients differ only in schema generics
-type MemoryClient = Pick<SupabaseClient<any, any, any>, "from">;
+import type { LogClient as MemoryClient } from "@/lib/trainingLog";
 
 export interface ConversationLine {
   who: "user" | "coach";

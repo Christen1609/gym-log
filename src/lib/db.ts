@@ -20,7 +20,7 @@ import {
 } from "@/lib/gymlog";
 import { getSupabaseClient } from "@/lib/supabase";
 import { expandSetRows, fetchHistory, type ImportExercise, type ImportSession } from "@/lib/trainingLog";
-import { CHAT_HISTORY_LIMIT, readConversation, saveCoachLine } from "@/lib/coachMemory";
+import { CHAT_HISTORY_LIMIT, readConversation, saveCoachLine, type ConversationLine } from "@/lib/coachMemory";
 
 /**
  * Seeds exercises, the rotation, and the demo session history — but only into
@@ -150,10 +150,7 @@ export async function saveProfile(profile: CoachProfile): Promise<void> {
   if (error) throw error;
 }
 
-export interface StoredChatMessage {
-  who: "user" | "coach";
-  text: string;
-}
+export type StoredChatMessage = ConversationLine;
 
 /** The recent conversation, oldest first, so the chat reopens where it left off. */
 export function loadChatMessages(limit = CHAT_HISTORY_LIMIT): Promise<StoredChatMessage[]> {

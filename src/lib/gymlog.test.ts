@@ -9,6 +9,7 @@ import {
   daysSinceTraining,
   entryE1rm,
   exerciseGroup,
+  findLatestSession,
   loadSummary,
   nextReminderAt,
   readOut,
@@ -274,5 +275,15 @@ describe("exerciseGroup", () => {
 
   it("returns an empty label instead of throwing for an exercise in neither", () => {
     expect(exerciseGroup("Sled Push", {})).toBe("");
+  });
+});
+
+describe("findLatestSession", () => {
+  it("ignores a session dated after today", () => {
+    const h: Record<string, ExerciseData> = {
+      "Bench Press": { group: "Chest · compound", hist: [{ date: "10 Nov", iso: "2026-11-10", w: 80, sets: 1, reps: 5, rpe: null }] },
+      "Back Squat": { group: "Legs · compound", hist: [{ date: "20 Nov", iso: "2026-11-20", w: 100, sets: 1, reps: 5, rpe: null }] },
+    };
+    expect(findLatestSession(h, new Date("2026-11-12T12:00:00"))?.date).toBe("10 Nov");
   });
 });
