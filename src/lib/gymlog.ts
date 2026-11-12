@@ -228,6 +228,15 @@ export function setDate(set: Pick<SetRow, "date" | "iso">, reference = new Date(
   return parseDateLabel(set.iso ?? set.date, reference);
 }
 
+/**
+ * An exercise's "Chest · compound" label: from the lifter's own history, else
+ * the demo data, else empty. An imported exercise that is in neither must
+ * not crash the exercise screen.
+ */
+export function exerciseGroup(name: string, history: Record<string, ExerciseData>): string {
+  return history[name]?.group ?? EX[name]?.group ?? "";
+}
+
 export function muscleFromGroup(group: string): string {
   return group.split(" · ")[0] || group;
 }

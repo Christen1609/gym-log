@@ -8,6 +8,7 @@ import {
   collapseHistory,
   daysSinceTraining,
   entryE1rm,
+  exerciseGroup,
   loadSummary,
   nextReminderAt,
   readOut,
@@ -261,5 +262,17 @@ describe("history keeps the session's full date", () => {
   it("collapseHistory carries the ISO date so the year is never guessed", () => {
     const h = collapseHistory([ex("e1", "Back Squat")], [set({ session_id: "s1", date: "2025-10-20" })]);
     expect(h["Back Squat"].hist[0]).toMatchObject({ date: "20 Oct", iso: "2025-10-20" });
+  });
+});
+
+describe("exerciseGroup", () => {
+  it("uses the lifter's own history first, then the demo data", () => {
+    const h: Record<string, ExerciseData> = { "Hack Squat": { group: "Legs · compound", hist: [] } };
+    expect(exerciseGroup("Hack Squat", h)).toBe("Legs · compound");
+    expect(exerciseGroup("Bench Press", {})).toBe("Chest · compound");
+  });
+
+  it("returns an empty label instead of throwing for an exercise in neither", () => {
+    expect(exerciseGroup("Sled Push", {})).toBe("");
   });
 });
