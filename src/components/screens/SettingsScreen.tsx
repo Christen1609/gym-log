@@ -222,6 +222,24 @@ export function SettingsScreen({ state }: { state: GymLogState }) {
             </div>
           </div>
         )}
+        {state.nativeApp && (
+          <div className="card" style={{ padding: 16, marginBottom: 11, gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 14.5, fontWeight: 600 }}>Apple Health</div>
+              <div style={{ fontSize: 11.5, opacity: 0.55 }}>
+                Saves workouts you time with the clock, and cardio, to the Health app.
+              </div>
+            </div>
+            <div className="seg2">
+              <button data-active={state.health ? "true" : "false"} onClick={() => void state.setHealth(true)}>
+                On
+              </button>
+              <button data-active={state.health ? "false" : "true"} onClick={() => void state.setHealth(false)}>
+                Off
+              </button>
+            </div>
+          </div>
+        )}
         <div className="card" style={{ padding: 16, marginBottom: 20, gap: 9 }}>
           <div>
             <div style={{ fontSize: 14.5, fontWeight: 600 }}>Next in rotation</div>

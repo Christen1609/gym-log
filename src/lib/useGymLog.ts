@@ -23,6 +23,7 @@ import {
   isoDaysAgo,
   nextReminderAt,
   restRemaining,
+  sessionMinutes,
   formatHistDate,
   readAiConsent,
   type AiConsent,
@@ -62,6 +63,7 @@ import {
   scheduleRestDone,
   tapHaptic,
 } from "@/lib/nativeExtras";
+import { requestHealth, saveWorkoutToHealth, setWidgetData } from "@/lib/nativeBridge";
 import {
   TOKEN_KEY as NOTION_TOKEN_KEY,
   deleteOauthConnection,
@@ -135,8 +137,9 @@ const STORAGE_KEY = "gymlog:v1";
 const CONSENT_KEY = "gymlog.aiConsent";
 const REMINDERS_KEY = "gymlog.reminders";
 const WORKOUT_KEY = "gymlog.workout";
+const HEALTH_KEY = "gymlog.health";
 /** Every key this app writes to localStorage; cleared when the account is deleted. */
-const LOCAL_KEYS = [STORAGE_KEY, NOTION_TOKEN_KEY, CONSENT_KEY, REMINDERS_KEY, WORKOUT_KEY];
+const LOCAL_KEYS = [STORAGE_KEY, NOTION_TOKEN_KEY, CONSENT_KEY, REMINDERS_KEY, WORKOUT_KEY, HEALTH_KEY];
 
 function loadPersisted(): Partial<PersistedState> {
   if (typeof window === "undefined") return {};
@@ -219,6 +222,8 @@ export function useGymLog() {
   const [recovering, setRecovering] = useState(false);
   // Native-only: the iOS shell's daily reminder. Off until the lifter turns it on.
   const [reminders, setRemindersOn] = useState(false);
+  // Native-only: write workouts and cardio to Apple Health. Off until turned on.
+  const [health, setHealthOn] = useState(false);
   // Computed after mount (see the hydration effect) so server and first client render match.
   const [nativeApp, setNativeApp] = useState(false);
   const [history, setHistory] = useState<Record<string, ExerciseData>>(EX);
@@ -300,6 +305,11 @@ export function useGymLog() {
       setRemindersOn(window.localStorage.getItem(REMINDERS_KEY) === "on");
     } catch {
       /* storage unavailable — reminders stay off */
+    }
+    try {
+      setHealthOn(window.localStorage.getItem(HEALTH_KEY) === "on");
+    } catch {
+      /* storage unavailable — health stays off */
     }
     // The workout clock only resumes on the day it started.
     try {
@@ -751,6 +761,7 @@ export function useGymLog() {
     setNotionConn(null);
     setNotionPages(null);
     setRemindersOn(false);
+    setHealthOn(false);
     await cancelReminder();
     await getSupabaseClient().auth.signOut({ scope: "local" });
     // Start clean: the deleted account's sets, chat and profile are still in
@@ -779,6 +790,17 @@ export function useGymLog() {
     setRemindersOn(next);
     try {
       window.localStorage.setItem(REMINDERS_KEY, next ? "on" : "off");
+    } catch {
+      /* storage unavailable — the choice still holds for this visit */
+    }
+  }, []);
+
+  // Turning Health on asks for write permission first; a refusal leaves it off.
+  const setHealth = useCallback(async (on: boolean) => {
+    const next = on ? await requestHealth() : false;
+    setHealthOn(next);
+    try {
+      window.localStorage.setItem(HEALTH_KEY, next ? "on" : "off");
     } catch {
       /* storage unavailable — the choice still holds for this visit */
     }
@@ -857,6 +879,13 @@ export function useGymLog() {
     if (at) void scheduleReminder(at, dayTitle);
   }, [reminders, nativeApp, syncing, syncedOnce, lastTrainingISO, dayTitle]);
 
+  // Home-screen widget: the rotation day and days since training. Written after
+  // the first real sync, and again whenever either value moves (i.e. after a save).
+  useEffect(() => {
+    if (!nativeApp || !syncedOnce) return;
+    void setWidgetData(dayTitle, daysSinceLast);
+  }, [nativeApp, syncedOnce, dayTitle, daysSinceLast]);
+
   // ── workout clock + rest timer ────────────────────────────────────────
   const startWorkout = useCallback(() => {
     const t = Date.now();
@@ -869,11 +898,19 @@ export function useGymLog() {
     void cancelRestDone();
   }, []);
 
-  // Finishing the workout also ends any rest still running.
+  // Finishing the workout also ends any rest still running. A strength session
+  // goes to Health only when the clock was running and something was logged.
   const endWorkout = useCallback(() => {
+    // Strength only: cardio rows in `logged` go to Health as their own workouts.
+    if (health && nativeApp && workout && logged.some((row) => row.name !== "Cardio")) {
+      const end = Date.now();
+      if (sessionMinutes(workout.startedAt, end) !== null) {
+        void saveWorkoutToHealth({ kind: "strength", start: workout.startedAt, end });
+      }
+    }
     setWorkout(null);
     cancelRest();
-  }, [cancelRest]);
+  }, [cancelRest, health, nativeApp, workout, logged]);
 
   const startRest = useCallback((seconds: number) => {
     const t = Date.now();
@@ -966,6 +1003,17 @@ export function useGymLog() {
             } else if (p.type === "log_cardio") {
               await logCardio({ date: p.date, kind: p.kind, minutes: p.minutes, distanceKm: p.distanceKm, note: p.note });
               setCardio(await loadCardio());
+              // Health gets the entry as a workout that ended now and ran for its minutes.
+              if (health && nativeApp && p.minutes !== null && p.date === today) {
+                const end = Date.now();
+                void saveWorkoutToHealth({
+                  kind: "cardio",
+                  start: end - p.minutes * 60_000,
+                  end,
+                  distanceKm: p.distanceKm ?? undefined,
+                  cardioKind: p.kind.toLowerCase(),
+                });
+              }
               if (p.date === today) {
                 setLogged((l) => l.concat({ name: "Cardio", summary: cardioSummary(p) }));
                 setLoggedOn(today);
@@ -992,7 +1040,7 @@ export function useGymLog() {
         }
       });
     },
-    [msgs, authed, units, todayInfo.iso, pickDay, setProposalStatus]
+    [msgs, authed, units, todayInfo.iso, pickDay, setProposalStatus, health, nativeApp]
   );
 
   // "Confirm all" on a message with several cards; each still gets its own
@@ -1127,6 +1175,8 @@ export function useGymLog() {
     finishRecovery,
     reminders,
     setReminders,
+    health,
+    setHealth,
     nativeApp,
     syncing,
     workoutStartedAt: workout?.startedAt ?? null,
