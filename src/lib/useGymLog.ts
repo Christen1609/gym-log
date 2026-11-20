@@ -50,11 +50,22 @@ import {
   removeSets,
   saveProfile,
   saveSet,
+  setInput,
   seedIfEmpty,
   type CoachProfile,
 } from "@/lib/db";
 import { proposalText, type CoachProposal } from "@/lib/coachActions";
 import { isNativeApp } from "@/lib/native";
+import {
+  QUEUE_KEY,
+  cacheKey,
+  dequeue,
+  enqueue,
+  isNetworkError,
+  readCache,
+  readQueue,
+  type QueueItem,
+} from "@/lib/offline";
 import {
   cancelReminder,
   cancelRestDone,
@@ -139,7 +150,72 @@ const REMINDERS_KEY = "gymlog.reminders";
 const WORKOUT_KEY = "gymlog.workout";
 const HEALTH_KEY = "gymlog.health";
 /** Every key this app writes to localStorage; cleared when the account is deleted. */
-const LOCAL_KEYS = [STORAGE_KEY, NOTION_TOKEN_KEY, CONSENT_KEY, REMINDERS_KEY, WORKOUT_KEY, HEALTH_KEY];
+const LOCAL_KEYS = [STORAGE_KEY, NOTION_TOKEN_KEY, CONSENT_KEY, REMINDERS_KEY, WORKOUT_KEY, HEALTH_KEY, QUEUE_KEY];
+
+function isOnline(): boolean {
+  return typeof navigator === "undefined" || navigator.onLine !== false;
+}
+
+function loadQueue(): QueueItem[] {
+  try {
+    return readQueue(window.localStorage.getItem(QUEUE_KEY));
+  } catch {
+    return [];
+  }
+}
+
+function storeQueue(queue: QueueItem[]): void {
+  try {
+    window.localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  } catch {
+    /* storage unavailable: the write stays only in memory */
+  }
+}
+
+/** Removes every per-user offline history copy kept on this device. */
+function clearHistoryCaches(): void {
+  try {
+    const prefix = cacheKey("");
+    for (const key of Object.keys(window.localStorage)) {
+      if (key.startsWith(prefix)) window.localStorage.removeItem(key);
+    }
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+function newQueueId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+let flushing = false;
+
+/**
+ * Replays queued writes in order. Each is removed on success; the first network
+ * failure stops the run (signal is still gone); any other error drops the item
+ * so one bad write cannot block the rest. Returns how many were written.
+ */
+async function replayQueue(): Promise<number> {
+  if (flushing) return 0;
+  flushing = true;
+  let written = 0;
+  try {
+    for (const item of loadQueue()) {
+      try {
+        if (item.kind === "set") await logSets(item.payload);
+        else await logCardio(item.payload);
+        written++;
+      } catch (err) {
+        if (isNetworkError(err, isOnline())) break;
+        console.error("Dropping a queued write the server rejected", err);
+      }
+      storeQueue(dequeue(loadQueue(), item.id));
+    }
+  } finally {
+    flushing = false;
+  }
+  return written;
+}
 
 function loadPersisted(): Partial<PersistedState> {
   if (typeof window === "undefined") return {};
@@ -240,6 +316,8 @@ export function useGymLog() {
   const [nowMs, setNowMs] = useState(0);
   const [profile, setProfile] = useState<CoachProfile | null>(null);
   const [cardio, setCardio] = useState<CardioEntry[]>([]);
+  // Writes saved on this device that have not reached the server yet.
+  const [pendingCount, setPendingCount] = useState(0);
 
   // Progressive enhancement: seed with the fallback copy immediately (so the
   // app matches the prototype offline with zero flicker), then let the real
@@ -325,6 +403,7 @@ export function useGymLog() {
       /* storage unavailable or unreadable — no clock to resume */
     }
     setNativeApp(isNativeApp());
+    setPendingCount(loadQueue().length);
     setHydrated(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -344,6 +423,12 @@ export function useGymLog() {
         return;
       }
       setSyncing(true);
+      let userId: string | null = null;
+      try {
+        userId = (await supabase.auth.getSession()).data.session?.user.id ?? null;
+      } catch {
+        /* no session readable: no cache either */
+      }
       // An OAuth Notion connection lives on the account; it wins over any
       // manually pasted token on this device.
       void fetchOauthConnection().then((conn) => {
@@ -351,11 +436,29 @@ export function useGymLog() {
       });
       try {
         await seedIfEmpty();
+        await replayQueue();
+        setPendingCount(loadQueue().length);
         const h = await loadHistory();
         setHistory(h);
-        void loadCardio()
-          .then(setCardio)
-          .catch((err) => console.error("Cardio load failed", err));
+        let freshCardio: CardioEntry[] | null = null;
+        try {
+          freshCardio = await loadCardio();
+          setCardio(freshCardio);
+        } catch (err) {
+          console.error("Cardio load failed", err);
+        }
+        // Keep the last good copy for offline launches.
+        if (userId) {
+          try {
+            const prev = readCache(window.localStorage.getItem(cacheKey(userId)));
+            window.localStorage.setItem(
+              cacheKey(userId),
+              JSON.stringify({ history: h, cardio: freshCardio ?? prev?.cardio ?? [], savedAt: Date.now() })
+            );
+          } catch {
+            /* storage full or unavailable: an offline launch just starts from seed data */
+          }
+        }
 
         // The coach's memory: reopen the saved conversation and profile.
         const [stored, prof] = await Promise.all([loadChatMessages(), loadProfile()]);
@@ -393,8 +496,21 @@ export function useGymLog() {
           }
         })();
       } catch (err) {
-        // Leave the seeded history in place so the app stays usable.
+        // Leave the seeded history in place so the app stays usable, unless
+        // there is no signal and this device kept the last synced copy.
         console.error("Supabase sync failed", err);
+        if (userId && isNetworkError(err, isOnline())) {
+          try {
+            const cached = readCache(window.localStorage.getItem(cacheKey(userId)));
+            if (cached) {
+              setHistory(cached.history);
+              setCardio(cached.cardio);
+              setSyncedOnce(true);
+            }
+          } catch {
+            /* unreadable cache: stay on seed data */
+          }
+        }
       } finally {
         setSyncing(false);
       }
@@ -421,7 +537,28 @@ export function useGymLog() {
       if (event === "PASSWORD_RECOVERY") setRecovering(true);
       void sync(Boolean(session));
     });
-    return () => sub.subscription.unsubscribe();
+    // Signal is back: send what was saved offline, then refresh history.
+    const onOnline = () => {
+      void (async () => {
+        if (loadQueue().length === 0) return;
+        try {
+          const { data } = await supabase.auth.getSession();
+          if (!data.session) return;
+          if ((await replayQueue()) > 0) {
+            setHistory(await loadHistory());
+            void loadCardio().then(setCardio).catch(() => {});
+          }
+        } catch (err) {
+          console.error("Sync after reconnect failed", err);
+        }
+        setPendingCount(loadQueue().length);
+      })();
+    };
+    window.addEventListener("online", onOnline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -597,12 +734,19 @@ export function useGymLog() {
     // The optimistic row above stays put if the write fails, so nothing the
     // user just entered disappears from the screen.
     if (isSupabaseConfigured && authed) {
+      const date = localISODate();
       void (async () => {
         try {
-          await saveSet(parsed);
+          await saveSet(parsed, date);
           setHistory(await loadHistory());
         } catch (err) {
           console.error("Failed to save set", err);
+          // No signal: keep it, with the day it was logged, and send it later.
+          if (isNetworkError(err, isOnline())) {
+            const next = enqueue(loadQueue(), { id: newQueueId(), kind: "set", payload: setInput(parsed, date) });
+            storeQueue(next);
+            setPendingCount(next.length);
+          }
         }
       })();
     }
@@ -763,6 +907,7 @@ export function useGymLog() {
     setRemindersOn(false);
     setHealthOn(false);
     await cancelReminder();
+    clearHistoryCaches();
     await getSupabaseClient().auth.signOut({ scope: "local" });
     // Start clean: the deleted account's sets, chat and profile are still in
     // memory, and the persist effect may already have written some back.
@@ -873,6 +1018,12 @@ export function useGymLog() {
   // the last training date moves (a logged session) or the rotation day changes.
   // Waits while a sync is running and until the first real sync has finished,
   // so it never schedules from the seed data.
+  // Offline shell: native app only. The website never registers a worker.
+  useEffect(() => {
+    if (!nativeApp || !("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js").catch((err) => console.error("Service worker failed", err));
+  }, [nativeApp]);
+
   useEffect(() => {
     if (!reminders || !nativeApp || syncing || !syncedOnce) return;
     const at = nextReminderAt(lastTrainingISO, new Date());
@@ -1001,8 +1152,16 @@ export function useGymLog() {
                 setLoggedPromptOn(today);
               }
             } else if (p.type === "log_cardio") {
-              await logCardio({ date: p.date, kind: p.kind, minutes: p.minutes, distanceKm: p.distanceKm, note: p.note });
-              setCardio(await loadCardio());
+              const entry = { date: p.date, kind: p.kind, minutes: p.minutes, distanceKm: p.distanceKm, note: p.note };
+              try {
+                await logCardio(entry);
+                setCardio(await loadCardio());
+              } catch (err) {
+                if (!isNetworkError(err, isOnline())) throw err;
+                const next = enqueue(loadQueue(), { id: newQueueId(), kind: "cardio", payload: entry });
+                storeQueue(next);
+                setPendingCount(next.length);
+              }
               // Health gets the entry as a workout that ended now and ran for its minutes.
               if (health && nativeApp && p.minutes !== null && p.date === today) {
                 const end = Date.now();
@@ -1119,6 +1278,7 @@ export function useGymLog() {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   return {
+    pendingCount,
     theme,
     toggleTheme: () => setTheme((t) => (t === "dark" ? "light" : "dark")),
     screen,

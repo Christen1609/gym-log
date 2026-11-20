@@ -365,16 +365,21 @@ export async function logSets(input: LogSetsInput): Promise<void> {
 }
 
 /** Writes a confirmed parse from the composer into today's session. */
-export function saveSet(parsed: ParsedSet): Promise<void> {
-  return logSets({
+export function saveSet(parsed: ParsedSet, date: string = localISODate()): Promise<void> {
+  return logSets(setInput(parsed, date));
+}
+
+/** The write for a confirmed parse; kept separate so an offline queue can store it with its original date. */
+export function setInput(parsed: ParsedSet, date: string): LogSetsInput {
+  return {
     exercise: parsed.name,
-    date: localISODate(),
+    date,
     weightKg: parsed.weight,
     reps: parsed.reps,
     sets: parsed.sets,
     rpe: parsed.rpe,
     note: parsed.note || null,
-  });
+  };
 }
 
 export interface CorrectSetsInput {

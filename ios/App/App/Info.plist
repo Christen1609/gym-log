@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>WKAppBoundDomains</key>
+	<array>
+		<string>gym-log-eight.vercel.app</string>
+		<string>duxqfwcxdmezwgxddaed.supabase.co</string>
+		<string>notion.so</string>
+		<string>www.notion.so</string>
+		<string>api.notion.com</string>
+	</array>
   <key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>

@@ -18,6 +18,8 @@ const config: CapacitorConfig = {
   ios: {
     contentInset: "never",
     backgroundColor: "#000000",
+    // Service workers in WKWebView only work for App-Bound Domains (see Info.plist WKAppBoundDomains).
+    limitsNavigationsToAppBoundDomains: true,
   },
 };
 

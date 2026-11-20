@@ -157,6 +157,12 @@ export function TodayScreen({ state }: { state: GymLogState }) {
 
         <WorkoutCard state={state} />
 
+        {state.pendingCount > 0 && (
+          <div className="micro" role="status" style={{ marginBottom: 14 }}>
+            Offline — {state.pendingCount} saved, will sync
+          </div>
+        )}
+
         {state.logged.length > 0 && (
           <div style={{ marginBottom: 18 }}>
             <div className="micro" style={{ marginBottom: 8, color: "var(--color-accent-2)" }}>
