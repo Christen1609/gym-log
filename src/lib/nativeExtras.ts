@@ -6,6 +6,8 @@ import { isNativeApp } from "@/lib/native";
 
 /** The one reminder this app ever has pending; scheduling replaces it. */
 const REMINDER_ID = 1;
+/** The "rest's up" notification; a new rest replaces it. */
+const REST_DONE_ID = 2;
 
 /** A light tap on save or confirm. Native only; failures are ignored. */
 export async function tapHaptic(): Promise<void> {
@@ -41,6 +43,35 @@ export async function cancelReminder(): Promise<void> {
   if (!isNativeApp()) return;
   try {
     await LocalNotifications.cancel({ notifications: [{ id: REMINDER_ID }] });
+  } catch {
+    /* nothing pending, or plugin unavailable */
+  }
+}
+
+/** Schedules "rest's up" at `at`, replacing any pending one. Native only; failures are ignored. */
+export async function scheduleRestDone(at: Date): Promise<void> {
+  if (!isNativeApp()) return;
+  try {
+    await LocalNotifications.cancel({ notifications: [{ id: REST_DONE_ID }] });
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id: REST_DONE_ID,
+          title: "Gym Log",
+          body: "Rest's up — next set.",
+          schedule: { at },
+        },
+      ],
+    });
+  } catch {
+    /* scheduling failed — the rest simply ends without a notification */
+  }
+}
+
+export async function cancelRestDone(): Promise<void> {
+  if (!isNativeApp()) return;
+  try {
+    await LocalNotifications.cancel({ notifications: [{ id: REST_DONE_ID }] });
   } catch {
     /* nothing pending, or plugin unavailable */
   }

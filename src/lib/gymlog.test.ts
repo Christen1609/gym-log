@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   aiAllowed,
   isoDaysAgo,
+  formatClock,
   readAiConsent,
+  restRemaining,
+  sessionMinutes,
   cardioBlock,
   cardioSummary,
   collapseHistory,
@@ -254,5 +257,43 @@ describe("readAiConsent", () => {
     expect(readAiConsent(null)).toBe(null);
     expect(readAiConsent("")).toBe(null);
     expect(readAiConsent("yes")).toBe(null);
+  });
+});
+
+describe("restRemaining", () => {
+  it("rounds the seconds left up, so the countdown never shows 0 early", () => {
+    expect(restRemaining(10_000, 4_500)).toBe(6);
+  });
+
+  it("is 0 once the end time has passed", () => {
+    expect(restRemaining(10_000, 10_000)).toBe(0);
+    expect(restRemaining(10_000, 99_000)).toBe(0);
+  });
+});
+
+describe("formatClock", () => {
+  it("formats m:ss under an hour and h:mm:ss from one hour up", () => {
+    expect(formatClock(5)).toBe("0:05");
+    expect(formatClock(125)).toBe("2:05");
+    expect(formatClock(3725)).toBe("1:02:05");
+  });
+});
+
+describe("sessionMinutes", () => {
+  const start = 1_000_000;
+  const min = 60_000;
+
+  it("is null without a start, or when the end is not after the start", () => {
+    expect(sessionMinutes(null, start + min)).toBeNull();
+    expect(sessionMinutes(start, start)).toBeNull();
+    expect(sessionMinutes(start, start - min)).toBeNull();
+  });
+
+  it("returns whole minutes for a normal session", () => {
+    expect(sessionMinutes(start, start + 30 * min)).toBe(30);
+  });
+
+  it("is null for a session longer than 5 hours", () => {
+    expect(sessionMinutes(start, start + 6 * 60 * min)).toBeNull();
   });
 });

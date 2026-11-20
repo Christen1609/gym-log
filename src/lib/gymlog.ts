@@ -700,3 +700,27 @@ export function isoDaysAgo(todayISO: string, days: number): string {
   const [y, m, d] = todayISO.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d - days)).toISOString().slice(0, 10);
 }
+
+// ── workout clock + rest timer ──────────────────────────────────────────
+
+/** Seconds left on a rest timer, rounded up so it never shows 0 while time remains. Never negative. */
+export function restRemaining(endsAtMs: number, nowMs: number): number {
+  return Math.max(0, Math.ceil((endsAtMs - nowMs) / 1000));
+}
+
+/** "m:ss" under an hour, "h:mm:ss" from one hour up. */
+export function formatClock(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+
+/** Whole minutes of a workout, or null when there is no start, the end is not after it, or it ran over 5 hours. */
+export function sessionMinutes(startMs: number | null, endMs: number): number | null {
+  if (startMs === null) return null;
+  const ms = endMs - startMs;
+  if (ms <= 0 || ms > 5 * 60 * 60 * 1000) return null;
+  return Math.round(ms / 60_000);
+}

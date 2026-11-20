@@ -209,7 +209,7 @@ export function SettingsScreen({ state }: { state: GymLogState }) {
             <div>
               <div style={{ fontSize: 14.5, fontWeight: 600 }}>Reminders</div>
               <div style={{ fontSize: 11.5, opacity: 0.55 }}>
-                {"A nudge at 6pm when you're two days past your last session."}
+                {"A 6pm nudge when two days pass without training — or today, if nothing's logged yet."}
               </div>
             </div>
             <div className="seg2">

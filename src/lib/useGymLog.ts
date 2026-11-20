@@ -22,6 +22,7 @@ import {
   daysSinceTraining,
   isoDaysAgo,
   nextReminderAt,
+  restRemaining,
   formatHistDate,
   readAiConsent,
   type AiConsent,
@@ -55,8 +56,10 @@ import { proposalText, type CoachProposal } from "@/lib/coachActions";
 import { isNativeApp } from "@/lib/native";
 import {
   cancelReminder,
+  cancelRestDone,
   requestReminderPermission,
   scheduleReminder,
+  scheduleRestDone,
   tapHaptic,
 } from "@/lib/nativeExtras";
 import {
@@ -131,8 +134,9 @@ interface PersistedState {
 const STORAGE_KEY = "gymlog:v1";
 const CONSENT_KEY = "gymlog.aiConsent";
 const REMINDERS_KEY = "gymlog.reminders";
+const WORKOUT_KEY = "gymlog.workout";
 /** Every key this app writes to localStorage; cleared when the account is deleted. */
-const LOCAL_KEYS = [STORAGE_KEY, NOTION_TOKEN_KEY, CONSENT_KEY, REMINDERS_KEY];
+const LOCAL_KEYS = [STORAGE_KEY, NOTION_TOKEN_KEY, CONSENT_KEY, REMINDERS_KEY, WORKOUT_KEY];
 
 function loadPersisted(): Partial<PersistedState> {
   if (typeof window === "undefined") return {};
@@ -219,6 +223,16 @@ export function useGymLog() {
   const [nativeApp, setNativeApp] = useState(false);
   const [history, setHistory] = useState<Record<string, ExerciseData>>(EX);
   const [syncing, setSyncing] = useState(false);
+  // True once a signed-in sync has pulled the account's real history. The
+  // reminder waits for it so it never judges the seed data.
+  const [syncedOnce, setSyncedOnce] = useState(false);
+  // The running workout clock: when it started, and the day it belongs to.
+  const [workout, setWorkout] = useState<{ startedAt: number; day: string } | null>(null);
+  // Rest ends at an absolute timestamp, so it keeps counting through a locked
+  // screen (not persisted). `nowMs` is the display clock, ticked below only
+  // while a workout or a rest is active.
+  const [restEndsAt, setRestEndsAt] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState(0);
   const [profile, setProfile] = useState<CoachProfile | null>(null);
   const [cardio, setCardio] = useState<CardioEntry[]>([]);
 
@@ -287,6 +301,19 @@ export function useGymLog() {
     } catch {
       /* storage unavailable — reminders stay off */
     }
+    // The workout clock only resumes on the day it started.
+    try {
+      const w = JSON.parse(window.localStorage.getItem(WORKOUT_KEY) ?? "null") as {
+        startedAt?: unknown;
+        day?: unknown;
+      } | null;
+      if (w && typeof w.startedAt === "number" && typeof w.day === "string" && w.day === localISODate()) {
+        setWorkout({ startedAt: w.startedAt, day: w.day });
+        setNowMs(Date.now());
+      }
+    } catch {
+      /* storage unavailable or unreadable — no clock to resume */
+    }
     setNativeApp(isNativeApp());
     setHydrated(true);
   }, []);
@@ -303,6 +330,7 @@ export function useGymLog() {
       if (!signedIn) {
         setHistory(EX);
         setCardio([]);
+        setSyncedOnce(false);
         return;
       }
       setSyncing(true);
@@ -323,6 +351,7 @@ export function useGymLog() {
         const [stored, prof] = await Promise.all([loadChatMessages(), loadProfile()]);
         if (stored.length) setMsgs(stored.map((m) => ({ id: msgIdRef.current++, who: m.who, text: m.text })));
         setProfile(prof);
+        setSyncedOnce(true);
 
         // Weekly check-in: the coach speaks first when a week has passed.
         // Fire-and-forget so sign-in never waits on Gemini.
@@ -405,6 +434,17 @@ export function useGymLog() {
       /* storage unavailable — non-fatal */
     }
   }, [hydrated, logged, units, voice, rpeAsk, theme, dayOverride, dayOverrideOn, loggedPromptOn, loggedOn, gapsDismissed]);
+
+  // The workout clock is kept across reloads; the day check happens on load.
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      if (workout) window.localStorage.setItem(WORKOUT_KEY, JSON.stringify(workout));
+      else window.localStorage.removeItem(WORKOUT_KEY);
+    } catch {
+      /* storage unavailable — the clock just won't survive a reload */
+    }
+  }, [hydrated, workout]);
 
   useEffect(() => {
     const refreshToday = () => setTodayInfo(getTodayInfo());
@@ -809,11 +849,54 @@ export function useGymLog() {
 
   // Keeps the one pending reminder pointed at the next due moment. Re-runs when
   // the last training date moves (a logged session) or the rotation day changes.
+  // Waits while a sync is running and until the first real sync has finished,
+  // so it never schedules from the seed data.
   useEffect(() => {
-    if (!reminders || !nativeApp) return;
+    if (!reminders || !nativeApp || syncing || !syncedOnce) return;
     const at = nextReminderAt(lastTrainingISO, new Date());
     if (at) void scheduleReminder(at, dayTitle);
-  }, [reminders, nativeApp, lastTrainingISO, dayTitle]);
+  }, [reminders, nativeApp, syncing, syncedOnce, lastTrainingISO, dayTitle]);
+
+  // ── workout clock + rest timer ────────────────────────────────────────
+  const startWorkout = useCallback(() => {
+    const t = Date.now();
+    setWorkout({ startedAt: t, day: localISODate(new Date(t)) });
+    setNowMs(t);
+  }, []);
+
+  const cancelRest = useCallback(() => {
+    setRestEndsAt(null);
+    void cancelRestDone();
+  }, []);
+
+  // Finishing the workout also ends any rest still running.
+  const endWorkout = useCallback(() => {
+    setWorkout(null);
+    cancelRest();
+  }, [cancelRest]);
+
+  const startRest = useCallback((seconds: number) => {
+    const t = Date.now();
+    const end = t + seconds * 1000;
+    setNowMs(t);
+    setRestEndsAt(end);
+    void scheduleRestDone(new Date(end));
+  }, []);
+
+  useEffect(() => {
+    if (!workout && restEndsAt === null) return;
+    const id = setInterval(() => {
+      const t = Date.now();
+      setNowMs(t);
+      if (restEndsAt !== null && restRemaining(restEndsAt, t) === 0) {
+        setRestEndsAt(null);
+        void tapHaptic();
+      }
+      // A workout that crosses midnight belongs to the day it started; it ends there.
+      if (workout && localISODate(new Date(t)) !== workout.day) setWorkout(null);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [workout, restEndsAt]);
 
   const pickDay = useCallback(
     (d: string) => {
@@ -1046,6 +1129,13 @@ export function useGymLog() {
     setReminders,
     nativeApp,
     syncing,
+    workoutStartedAt: workout?.startedAt ?? null,
+    startWorkout,
+    endWorkout,
+    restEndsAt,
+    startRest,
+    cancelRest,
+    nowMs,
     profile,
     saveCoachProfile,
     supabaseEnabled: isSupabaseConfigured,

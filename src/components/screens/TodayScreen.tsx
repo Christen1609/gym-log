@@ -1,9 +1,72 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/IconSprite";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { formatClock, restRemaining } from "@/lib/gymlog";
 import type { GymLogState } from "@/lib/useGymLog";
 
 const SUGGESTIONS = ["What's today?", "Am I stalling?", "What is RPE?", "Log a set, or ask the coach…"];
+const REST_PRESETS = [60, 90, 120, 180];
+
+/**
+ * Workout clock and rest timer. The clock runs only after "Start workout"; the
+ * rest pills work either way. Ticking happens in the hook, so this only renders.
+ */
+function WorkoutCard({ state }: { state: GymLogState }) {
+  const { workoutStartedAt, restEndsAt, nowMs } = state;
+  const elapsed = workoutStartedAt === null ? 0 : Math.floor((nowMs - workoutStartedAt) / 1000);
+  const remaining = restEndsAt === null ? 0 : restRemaining(restEndsAt, nowMs);
+
+  return (
+    <div className="card" style={{ padding: 14, marginBottom: 18, gap: 12 }}>
+      {workoutStartedAt === null ? (
+        <button type="button" className="btn btn-secondary btn-block" onClick={state.startWorkout}>
+          Start workout
+        </button>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span className="num" style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>
+            Workout · {formatClock(elapsed)}
+          </span>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={state.endWorkout}
+            style={{ minHeight: 36, padding: "6px 14px" }}
+          >
+            End
+          </button>
+        </div>
+      )}
+
+      {restEndsAt !== null ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span className="num" style={{ flex: 1, fontFamily: "var(--font-heading)", fontSize: 34, lineHeight: 1, letterSpacing: "-.02em" }}>
+            Rest {formatClock(remaining)}
+          </span>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={state.cancelRest}
+            style={{ minHeight: 36, padding: "6px 14px" }}
+          >
+            Skip
+          </button>
+        </div>
+      ) : (
+        <div className="xscroll" style={{ display: "flex", gap: 7, alignItems: "center" }}>
+          <span className="micro" style={{ paddingRight: 4 }}>
+            Rest
+          </span>
+          {REST_PRESETS.map((s) => (
+            <button key={s} type="button" className="pill num" onClick={() => state.startRest(s)}>
+              {formatClock(s)}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function TodayScreen({ state }: { state: GymLogState }) {
   const draftRef = useRef<HTMLInputElement>(null);
@@ -91,6 +154,8 @@ export function TodayScreen({ state }: { state: GymLogState }) {
           </button>
         )}
         {state.dayIsAuto && <div style={{ height: 12 }} />}
+
+        <WorkoutCard state={state} />
 
         {state.logged.length > 0 && (
           <div style={{ marginBottom: 18 }}>
