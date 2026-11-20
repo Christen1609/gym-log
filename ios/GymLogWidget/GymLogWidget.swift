@@ -6,34 +6,67 @@ private let appGroup = "group.com.christen1609.gymlog"
 struct GymEntry: TimelineEntry {
     let date: Date
     let nextDay: String
-    let daysSince: Int // -1 = no sessions yet
+    let lastTrainingISO: String // "YYYY-MM-DD", or "" = no sessions yet
+
+    /// Whole local calendar days between the last training day and this entry's date; nil = none.
+    var daysSince: Int? {
+        let parts = lastTrainingISO.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        let calendar = Calendar.current
+        var comps = DateComponents()
+        comps.year = parts[0]
+        comps.month = parts[1]
+        comps.day = parts[2]
+        guard let last = calendar.date(from: comps) else { return nil }
+        let from = calendar.startOfDay(for: last)
+        let to = calendar.startOfDay(for: date)
+        guard let days = calendar.dateComponents([.day], from: from, to: to).day else { return nil }
+        return max(days, 0)
+    }
 }
 
-private func loadEntry() -> GymEntry {
+private func loadValues() -> (nextDay: String, lastTrainingISO: String) {
     let defaults = UserDefaults(suiteName: appGroup)
-    let next = defaults?.string(forKey: "nextDay") ?? ""
-    let since = defaults?.object(forKey: "daysSince") as? Int ?? -1
-    return GymEntry(date: Date(), nextDay: next, daysSince: since)
+    return (
+        defaults?.string(forKey: "nextDay") ?? "",
+        defaults?.string(forKey: "lastTrainingISO") ?? ""
+    )
 }
 
 struct GymProvider: TimelineProvider {
     func placeholder(in context: Context) -> GymEntry {
-        GymEntry(date: Date(), nextDay: "Push", daysSince: 1)
+        let today = Calendar.current.startOfDay(for: Date())
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: today) ?? today
+        let f = DateFormatter()
+        f.calendar = Calendar.current
+        f.dateFormat = "yyyy-MM-dd"
+        return GymEntry(date: Date(), nextDay: "Push", lastTrainingISO: f.string(from: yesterday))
     }
 
     func getSnapshot(in context: Context, completion: @escaping (GymEntry) -> Void) {
-        completion(loadEntry())
+        let v = loadValues()
+        completion(GymEntry(date: Date(), nextDay: v.nextDay, lastTrainingISO: v.lastTrainingISO))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<GymEntry>) -> Void) {
-        let entry = loadEntry()
-        let refresh = Calendar.current.date(byAdding: .hour, value: 6, to: entry.date) ?? entry.date.addingTimeInterval(21600)
-        completion(Timeline(entries: [entry], policy: .after(refresh)))
+        let v = loadValues()
+        let calendar = Calendar.current
+        let now = Date()
+        // One entry now, then one at each of the next three local midnights, so the
+        // "days since" text rolls over on its own even if the app is not opened.
+        var entries = [GymEntry(date: now, nextDay: v.nextDay, lastTrainingISO: v.lastTrainingISO)]
+        let todayStart = calendar.startOfDay(for: now)
+        for offset in 1...3 {
+            if let midnight = calendar.date(byAdding: .day, value: offset, to: todayStart) {
+                entries.append(GymEntry(date: midnight, nextDay: v.nextDay, lastTrainingISO: v.lastTrainingISO))
+            }
+        }
+        completion(Timeline(entries: entries, policy: .atEnd))
     }
 }
 
-private func sinceText(_ days: Int) -> String {
-    if days < 0 { return "No sessions yet" }
+private func sinceText(_ days: Int?) -> String {
+    guard let days = days else { return "No sessions yet" }
     if days == 0 { return "Trained today" }
     if days == 1 { return "1 day since training" }
     return "\(days) days since training"

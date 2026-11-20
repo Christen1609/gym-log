@@ -314,7 +314,7 @@ export interface LogSetsInput {
  * exercise, if it's new — as needed. Set numbering continues from whatever
  * is already logged for that exercise that day.
  */
-export async function logSets(input: LogSetsInput): Promise<void> {
+export async function logSets(input: LogSetsInput, clientId?: string): Promise<void> {
   const supabase = getSupabaseClient();
 
   let exercise = await findExercise(supabase, input.exercise);
@@ -358,10 +358,24 @@ export async function logSets(input: LogSetsInput): Promise<void> {
     reps: input.reps,
     rpe: input.rpe,
     felt_note: i === input.sets - 1 ? input.note || null : null,
+    ...(clientId ? { client_id: clientId } : {}),
   }));
 
   const { error: insertError } = await supabase.from("sets").insert(rows);
   if (insertError) throw insertError;
+}
+
+/** True when this user already has a row written with `clientId` (a replay that landed earlier). */
+export async function clientIdExists(kind: "set" | "cardio", userId: string, clientId: string): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from(kind === "set" ? "sets" : "cardio")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("client_id", clientId)
+    .limit(1);
+  if (error) throw error;
+  return (data?.length ?? 0) > 0;
 }
 
 /** Writes a confirmed parse from the composer into today's session. */
@@ -452,9 +466,10 @@ export async function appendCoachMessage(text: string): Promise<void> {
 // ── cardio ───────────────────────────────────────────────────────────────
 
 /** Saves one confirmed cardio session. */
-export async function logCardio(entry: CardioEntry): Promise<void> {
+export async function logCardio(entry: CardioEntry, clientId?: string): Promise<void> {
   const supabase = getSupabaseClient();
   const { error } = await supabase.from("cardio").insert({
+    ...(clientId ? { client_id: clientId } : {}),
     date: entry.date,
     kind: entry.kind,
     minutes: entry.minutes,

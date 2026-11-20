@@ -39,6 +39,7 @@ import { recoveryTokensFromHash } from "@/lib/recovery";
 import {
   appendCoachMessage,
   deleteAccount as deleteAccountData,
+  clientIdExists,
   correctSets,
   importHistory,
   loadCardio,
@@ -57,11 +58,14 @@ import {
 import { proposalText, type CoachProposal } from "@/lib/coachActions";
 import { isNativeApp } from "@/lib/native";
 import {
+  LAST_USER_KEY,
   QUEUE_KEY,
   cacheKey,
   dequeue,
   enqueue,
   isNetworkError,
+  itemsForUser,
+  offlineFallback,
   readCache,
   readQueue,
   type QueueItem,
@@ -150,7 +154,7 @@ const REMINDERS_KEY = "gymlog.reminders";
 const WORKOUT_KEY = "gymlog.workout";
 const HEALTH_KEY = "gymlog.health";
 /** Every key this app writes to localStorage; cleared when the account is deleted. */
-const LOCAL_KEYS = [STORAGE_KEY, NOTION_TOKEN_KEY, CONSENT_KEY, REMINDERS_KEY, WORKOUT_KEY, HEALTH_KEY, QUEUE_KEY];
+const LOCAL_KEYS = [STORAGE_KEY, NOTION_TOKEN_KEY, CONSENT_KEY, REMINDERS_KEY, WORKOUT_KEY, HEALTH_KEY, QUEUE_KEY, LAST_USER_KEY];
 
 function isOnline(): boolean {
   return typeof navigator === "undefined" || navigator.onLine !== false;
@@ -188,6 +192,31 @@ function newQueueId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function newClientId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : newQueueId();
+}
+
+/** Keeps a write for later. Native app only, and only with a known user; returns the new queue length or null. */
+function queueWrite(userId: string | null, item: Pick<QueueItem, "kind" | "payload">): number | null {
+  if (!userId || !isNativeApp()) return null;
+  const next = enqueue(loadQueue(), { id: newQueueId(), userId, clientId: newClientId(), ...item } as QueueItem);
+  storeQueue(next);
+  return next.length;
+}
+
+/** How many queued writes belong to this user (others' stay hidden until they sign in). */
+function pendingFor(userId: string | null): number {
+  return userId ? itemsForUser(loadQueue(), userId).length : 0;
+}
+
+function readLastUser(): string | null {
+  try {
+    return window.localStorage.getItem(LAST_USER_KEY);
+  } catch {
+    return null;
+  }
+}
+
 let flushing = false;
 
 /**
@@ -195,16 +224,20 @@ let flushing = false;
  * failure stops the run (signal is still gone); any other error drops the item
  * so one bad write cannot block the rest. Returns how many were written.
  */
-async function replayQueue(): Promise<number> {
+async function replayQueue(userId: string): Promise<number> {
   if (flushing) return 0;
   flushing = true;
   let written = 0;
   try {
-    for (const item of loadQueue()) {
+    // Only this user's writes; anyone else's stay queued for their next sign-in.
+    for (const item of itemsForUser(loadQueue(), userId)) {
       try {
-        if (item.kind === "set") await logSets(item.payload);
-        else await logCardio(item.payload);
-        written++;
+        // A replay whose first attempt already landed (response lost) is done.
+        if (!(await clientIdExists(item.kind, userId, item.clientId))) {
+          if (item.kind === "set") await logSets(item.payload, item.clientId);
+          else await logCardio(item.payload, item.clientId);
+          written++;
+        }
       } catch (err) {
         if (isNetworkError(err, isOnline())) break;
         console.error("Dropping a queued write the server rejected", err);
@@ -318,6 +351,11 @@ export function useGymLog() {
   const [cardio, setCardio] = useState<CardioEntry[]>([]);
   // Writes saved on this device that have not reached the server yet.
   const [pendingCount, setPendingCount] = useState(0);
+  // Native only: running from the cached copy because the token expired with no signal.
+  const [offlineMode, setOfflineMode] = useState(false);
+  const offlineRef = useRef(false);
+  // The signed-in (or offline-fallback) user, for tagging queued writes.
+  const userIdRef = useRef<string | null>(null);
 
   // Progressive enhancement: seed with the fallback copy immediately (so the
   // app matches the prototype offline with zero flicker), then let the real
@@ -403,7 +441,12 @@ export function useGymLog() {
       /* storage unavailable or unreadable — no clock to resume */
     }
     setNativeApp(isNativeApp());
-    setPendingCount(loadQueue().length);
+    try {
+      const last = JSON.parse(readLastUser() ?? "null") as { id?: unknown } | null;
+      setPendingCount(pendingFor(last && typeof last.id === "string" ? last.id : null));
+    } catch {
+      /* unreadable last user: the count fills in after sign-in */
+    }
     setHydrated(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -414,9 +457,38 @@ export function useGymLog() {
     if (!isSupabaseConfigured) return;
     const supabase = getSupabaseClient();
 
+    const setOffline = (on: boolean) => {
+      offlineRef.current = on;
+      setOfflineMode(on);
+    };
+
+    // Expired token, no signal, native app: stay signed in on the cached copy.
+    const enterOffline = (id: string) => {
+      userIdRef.current = id;
+      setOffline(true);
+      setAuthed(true);
+      setSyncing(false);
+      try {
+        const cached = readCache(window.localStorage.getItem(cacheKey(id)));
+        if (cached) {
+          setHistory(cached.history);
+          setCardio(cached.cardio);
+          setSyncedOnce(true);
+        }
+      } catch {
+        /* unreadable cache: stay on seed data */
+      }
+      setPendingCount(pendingFor(userIdRef.current));
+    };
+
+    const fallbackFor = (hasSession: boolean): string | null =>
+      offlineFallback({ hasSession, online: isOnline(), native: isNativeApp(), lastUserRaw: readLastUser() });
+
     const sync = async (signedIn: boolean) => {
+      setOffline(false);
       setAuthed(signedIn);
       if (!signedIn) {
+        userIdRef.current = null;
         setHistory(EX);
         setCardio([]);
         setSyncedOnce(false);
@@ -429,6 +501,7 @@ export function useGymLog() {
       } catch {
         /* no session readable: no cache either */
       }
+      userIdRef.current = userId;
       // An OAuth Notion connection lives on the account; it wins over any
       // manually pasted token on this device.
       void fetchOauthConnection().then((conn) => {
@@ -436,8 +509,8 @@ export function useGymLog() {
       });
       try {
         await seedIfEmpty();
-        await replayQueue();
-        setPendingCount(loadQueue().length);
+        if (userId) await replayQueue(userId);
+        setPendingCount(pendingFor(userIdRef.current));
         const h = await loadHistory();
         setHistory(h);
         let freshCardio: CardioEntry[] | null = null;
@@ -448,7 +521,7 @@ export function useGymLog() {
           console.error("Cardio load failed", err);
         }
         // Keep the last good copy for offline launches.
-        if (userId) {
+        if (userId && isNativeApp()) {
           try {
             const prev = readCache(window.localStorage.getItem(cacheKey(userId)));
             window.localStorage.setItem(
@@ -457,6 +530,14 @@ export function useGymLog() {
             );
           } catch {
             /* storage full or unavailable: an offline launch just starts from seed data */
+          }
+        }
+
+        if (userId && isNativeApp()) {
+          try {
+            window.localStorage.setItem(LAST_USER_KEY, JSON.stringify({ id: userId }));
+          } catch {
+            /* storage unavailable: an expired-token offline launch will show sign-in */
           }
         }
 
@@ -499,7 +580,7 @@ export function useGymLog() {
         // Leave the seeded history in place so the app stays usable, unless
         // there is no signal and this device kept the last synced copy.
         console.error("Supabase sync failed", err);
-        if (userId && isNetworkError(err, isOnline())) {
+        if (userId && isNativeApp() && isNetworkError(err, isOnline())) {
           try {
             const cached = readCache(window.localStorage.getItem(cacheKey(userId)));
             if (cached) {
@@ -531,27 +612,45 @@ export function useGymLog() {
 
     supabase.auth
       .getSession()
-      .then(({ data }: { data: { session: Session | null } }) => void sync(Boolean(data.session)));
+      .then(({ data }: { data: { session: Session | null } }) => {
+        const id = fallbackFor(Boolean(data.session));
+        if (id) enterOffline(id);
+        else void sync(Boolean(data.session));
+      });
     const { data: sub } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
       // A password-reset link signs the lifter in, then asks them to set a new password.
       if (event === "PASSWORD_RECOVERY") setRecovering(true);
-      void sync(Boolean(session));
+      // A deliberate sign-out never falls back to the cached user.
+      const id = event === "SIGNED_OUT" ? null : fallbackFor(Boolean(session));
+      if (id) enterOffline(id);
+      else void sync(Boolean(session));
     });
     // Signal is back: send what was saved offline, then refresh history.
     const onOnline = () => {
       void (async () => {
+        if (offlineRef.current) {
+          // Back online after running on the cache: a real session means a normal
+          // sync (which also flushes the queue); none means sign in again.
+          try {
+            const { data } = await supabase.auth.getSession();
+            await sync(Boolean(data.session));
+          } catch (err) {
+            console.error("Re-check after reconnect failed", err);
+          }
+          return;
+        }
         if (loadQueue().length === 0) return;
         try {
           const { data } = await supabase.auth.getSession();
           if (!data.session) return;
-          if ((await replayQueue()) > 0) {
+          if ((await replayQueue(data.session.user.id)) > 0) {
             setHistory(await loadHistory());
             void loadCardio().then(setCardio).catch(() => {});
           }
         } catch (err) {
           console.error("Sync after reconnect failed", err);
         }
-        setPendingCount(loadQueue().length);
+        setPendingCount(pendingFor(userIdRef.current));
       })();
     };
     window.addEventListener("online", onOnline);
@@ -743,9 +842,8 @@ export function useGymLog() {
           console.error("Failed to save set", err);
           // No signal: keep it, with the day it was logged, and send it later.
           if (isNetworkError(err, isOnline())) {
-            const next = enqueue(loadQueue(), { id: newQueueId(), kind: "set", payload: setInput(parsed, date) });
-            storeQueue(next);
-            setPendingCount(next.length);
+            const n = queueWrite(userIdRef.current, { kind: "set", payload: setInput(parsed, date) });
+            if (n !== null) setPendingCount(pendingFor(userIdRef.current));
           }
         }
       })();
@@ -907,6 +1005,7 @@ export function useGymLog() {
     setRemindersOn(false);
     setHealthOn(false);
     await cancelReminder();
+    void setWidgetData("", null);
     clearHistoryCaches();
     await getSupabaseClient().auth.signOut({ scope: "local" });
     // Start clean: the deleted account's sets, chat and profile are still in
@@ -919,6 +1018,22 @@ export function useGymLog() {
       }
     }
     window.location.reload();
+  }, []);
+
+  // Plain sign-out: forget this device's copy of the account (history cache,
+  // last user, workout clock, widget) but keep queued writes. They belong to
+  // that user and replay on their next sign-in.
+  const signOut = useCallback(async () => {
+    clearHistoryCaches();
+    try {
+      window.localStorage.removeItem(LAST_USER_KEY);
+      window.localStorage.removeItem(WORKOUT_KEY);
+    } catch {
+      /* storage unavailable */
+    }
+    setWorkout(null);
+    void setWidgetData("", null);
+    await getSupabaseClient().auth.signOut();
   }, []);
 
   // Sets the new password on the recovery session; the app then carries on as normal.
@@ -1014,28 +1129,29 @@ export function useGymLog() {
   // The calendar date of the last training, reconstructed from how long ago it was.
   const lastTrainingISO = daysSinceLast === null || !todayInfo.iso ? null : isoDaysAgo(todayInfo.iso, daysSinceLast);
 
-  // Keeps the one pending reminder pointed at the next due moment. Re-runs when
-  // the last training date moves (a logged session) or the rotation day changes.
-  // Waits while a sync is running and until the first real sync has finished,
-  // so it never schedules from the seed data.
   // Offline shell: native app only. The website never registers a worker.
   useEffect(() => {
     if (!nativeApp || !("serviceWorker" in navigator)) return;
     navigator.serviceWorker.register("/sw.js").catch((err) => console.error("Service worker failed", err));
   }, [nativeApp]);
 
+  // Keeps the one pending reminder pointed at the next due moment. Re-runs when
+  // the last training date moves (a logged session) or the rotation day changes.
+  // Waits while a sync is running and until the first real sync has finished,
+  // so it never schedules from the seed data.
   useEffect(() => {
     if (!reminders || !nativeApp || syncing || !syncedOnce) return;
     const at = nextReminderAt(lastTrainingISO, new Date());
     if (at) void scheduleReminder(at, dayTitle);
   }, [reminders, nativeApp, syncing, syncedOnce, lastTrainingISO, dayTitle]);
 
-  // Home-screen widget: the rotation day and days since training. Written after
-  // the first real sync, and again whenever either value moves (i.e. after a save).
+  // Home-screen widget: the rotation day and the last training date (the widget
+  // works out "days since" itself). Written after the first real sync, and again
+  // whenever either value moves (i.e. after a save).
   useEffect(() => {
     if (!nativeApp || !syncedOnce) return;
-    void setWidgetData(dayTitle, daysSinceLast);
-  }, [nativeApp, syncedOnce, dayTitle, daysSinceLast]);
+    void setWidgetData(dayTitle, lastTrainingISO);
+  }, [nativeApp, syncedOnce, dayTitle, lastTrainingISO]);
 
   // ── workout clock + rest timer ────────────────────────────────────────
   const startWorkout = useCallback(() => {
@@ -1158,9 +1274,9 @@ export function useGymLog() {
                 setCardio(await loadCardio());
               } catch (err) {
                 if (!isNetworkError(err, isOnline())) throw err;
-                const next = enqueue(loadQueue(), { id: newQueueId(), kind: "cardio", payload: entry });
-                storeQueue(next);
-                setPendingCount(next.length);
+                const n = queueWrite(userIdRef.current, { kind: "cardio", payload: entry });
+                if (n === null) throw err;
+                setPendingCount(pendingFor(userIdRef.current));
               }
               // Health gets the entry as a workout that ended now and ran for its minutes.
               if (health && nativeApp && p.minutes !== null && p.date === today) {
@@ -1279,6 +1395,7 @@ export function useGymLog() {
 
   return {
     pendingCount,
+    offlineMode,
     theme,
     toggleTheme: () => setTheme((t) => (t === "dark" ? "light" : "dark")),
     screen,
@@ -1349,7 +1466,7 @@ export function useGymLog() {
     profile,
     saveCoachProfile,
     supabaseEnabled: isSupabaseConfigured,
-    signOut: () => void getSupabaseClient().auth.signOut(),
+    signOut: () => void signOut(),
     deleteAccount,
     aiConsent,
     setAiConsent,

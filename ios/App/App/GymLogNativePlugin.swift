@@ -144,7 +144,10 @@ public class GymLogNativePlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         defaults.set(call.getString("nextDay") ?? "", forKey: "nextDay")
-        defaults.set(call.getInt("daysSince") ?? -1, forKey: "daysSince")
+        // "YYYY-MM-DD" of the last training day, or "" for none. The widget works out
+        // days-since itself so it stays correct as days pass without the app open.
+        defaults.set(call.getString("lastTrainingISO") ?? "", forKey: "lastTrainingISO")
+        defaults.removeObject(forKey: "daysSince")
         defaults.set(Date().timeIntervalSince1970, forKey: "updatedAt")
         if #available(iOS 14.0, *) {
             WidgetCenter.shared.reloadAllTimelines()

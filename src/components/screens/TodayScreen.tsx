@@ -157,9 +157,9 @@ export function TodayScreen({ state }: { state: GymLogState }) {
 
         <WorkoutCard state={state} />
 
-        {state.pendingCount > 0 && (
+        {(state.pendingCount > 0 || state.offlineMode) && (
           <div className="micro" role="status" style={{ marginBottom: 14 }}>
-            Offline — {state.pendingCount} saved, will sync
+            {state.pendingCount > 0 ? `Offline — ${state.pendingCount} saved, will sync` : "Offline"}
           </div>
         )}
 

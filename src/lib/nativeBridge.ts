@@ -16,7 +16,7 @@ export interface SaveWorkoutOptions {
 interface GymLogNativePlugin {
   requestHealth(): Promise<{ granted: boolean }>;
   saveWorkout(opts: SaveWorkoutOptions): Promise<void>;
-  setWidgetData(opts: { nextDay: string; daysSince: number | null }): Promise<void>;
+  setWidgetData(opts: { nextDay: string; lastTrainingISO: string | null }): Promise<void>;
 }
 
 const GymLogNative = registerPlugin<GymLogNativePlugin>("GymLogNative");
@@ -45,11 +45,15 @@ export async function saveWorkoutToHealth(opts: SaveWorkoutOptions): Promise<boo
   }
 }
 
-/** Share the next day / days-since values with the home-screen widget. */
-export async function setWidgetData(nextDay: string, daysSince: number | null): Promise<void> {
+/**
+ * Share the next day and the last training date (YYYY-MM-DD, or null for none)
+ * with the home-screen widget, which works out "days since" itself so it stays
+ * right as the days pass.
+ */
+export async function setWidgetData(nextDay: string, lastTrainingISO: string | null): Promise<void> {
   if (!isNativeApp()) return;
   try {
-    await GymLogNative.setWidgetData({ nextDay, daysSince });
+    await GymLogNative.setWidgetData({ nextDay, lastTrainingISO });
   } catch (err) {
     console.warn("setWidgetData failed", err);
   }

@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { cacheKey, dequeue, enqueue, isNetworkError, readCache, readQueue, type QueueItem } from "./offline";
+import {
+  cacheKey,
+  dequeue,
+  enqueue,
+  isNetworkError,
+  itemsForUser,
+  offlineFallback,
+  readCache,
+  readQueue,
+  type QueueItem,
+} from "./offline";
 
-const set = (id: string): QueueItem => ({
+const set = (id: string, userId = "u1"): QueueItem => ({
   id,
+  userId,
+  clientId: `c-${id}`,
   kind: "set",
   payload: { exercise: "Squat", date: "2026-11-10", weightKg: 100, reps: 5, sets: 3, rpe: null, note: null },
 });
@@ -53,5 +65,36 @@ describe("cache", () => {
     expect(readCache(JSON.stringify({ history: [], cardio: [], savedAt: 1 }))).toBeNull();
     expect(readCache(JSON.stringify({ history: {}, cardio: {}, savedAt: 1 }))).toBeNull();
     expect(readCache(JSON.stringify({ history: {}, cardio: [] }))).toBeNull();
+  });
+});
+
+describe("itemsForUser", () => {
+  it("keeps only the signed-in user's items, in order", () => {
+    const q = [set("a", "u1"), set("b", "u2"), set("c", "u1")];
+    expect(itemsForUser(q, "u1").map((i) => i.id)).toEqual(["a", "c"]);
+    expect(itemsForUser(q, "u3")).toEqual([]);
+  });
+  it("readQueue drops items without a user or client id", () => {
+    const bad = { id: "x", kind: "set", payload: {} };
+    expect(readQueue(JSON.stringify([set("a"), bad]))).toEqual([set("a")]);
+  });
+});
+
+describe("offlineFallback", () => {
+  const base = { hasSession: false, online: false, native: true, lastUserRaw: JSON.stringify({ id: "u1" }) };
+  it("returns the last user when native, offline and sessionless", () => {
+    expect(offlineFallback(base)).toBe("u1");
+  });
+  it("returns null when a session exists, online, or not native", () => {
+    expect(offlineFallback({ ...base, hasSession: true })).toBeNull();
+    expect(offlineFallback({ ...base, online: true })).toBeNull();
+    expect(offlineFallback({ ...base, native: false })).toBeNull();
+  });
+  it("returns null for missing or malformed lastUser", () => {
+    expect(offlineFallback({ ...base, lastUserRaw: null })).toBeNull();
+    expect(offlineFallback({ ...base, lastUserRaw: "{x" })).toBeNull();
+    expect(offlineFallback({ ...base, lastUserRaw: JSON.stringify({ id: "" }) })).toBeNull();
+    expect(offlineFallback({ ...base, lastUserRaw: JSON.stringify({ id: 5 }) })).toBeNull();
+    expect(offlineFallback({ ...base, lastUserRaw: "null" })).toBeNull();
   });
 });
